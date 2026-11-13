@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>서울: 마지막 주파수 — SEC 01 양재동</title>
+<link rel="preload" href="/seoul-last-frequency-demo/fonts/Galmuri11.woff2" as="font" type="font/woff2" crossorigin />
+  <script type="module" crossorigin src="/seoul-last-frequency-demo/assets/index-ujQPNKnp.js"></script>
+  <link rel="stylesheet" crossorigin href="/seoul-last-frequency-demo/assets/index-2mmMqcpJ.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="noise"></div>
+
+<!-- TITLE -->
+<section id="title" class="screen">
+  <div class="t-panel">
+    <header class="t-meta grid1">
+      <div><samp>UNIT / 양재-01</samp><samp>REV 6.0 ®</samp></div>
+      <div><samp>37.4842°N 127.0347°E</samp><samp>SEC 01 / 05</samp></div>
+    </header>
+    <h1 class="macro">서울:<br/>마지막<br/>주파수</h1>
+    <div class="stripe"></div>
+    <p class="t-lede">양재동, 정전 사흘째. 무전은 한 문장만 반복한다 — <b>물가로 가라.</b><br/>인간에게 옮는 광견병. 감염자는 열린 물에 다가오지 못한다.</p>
+    <nav class="t-menu">
+      <button id="btnStart" class="row hot"><kbd>01</kbd><span>출발 — 양재동 → 양재천</span><i>&gt;&gt;&gt;</i></button>
+      <button id="btnQuality" class="row"><kbd>02</kbd><span>그래픽 품질</span><output id="qLabel">고</output></button>
+      <button id="btnHelp" class="row"><kbd>03</kbd><span>조작법</span><i>///</i></button>
+    </nav>
+    <footer class="t-foot"><div class="barcode"></div><samp>VERTICAL SLICE · 0.1 · 모든 도트 코드 생성 · WEBP</samp></footer>
+  </div>
+  <div class="t-frame"><span class="cross tl">+</span><span class="cross tr">+</span><span class="cross bl">+</span><span class="cross br">+</span>
+    <samp class="t-cap">[ LIVE FEED / 양재동 상가로 23:41 ]</samp></div>
+</section>
+
+<!-- HUD -->
+<section id="hud" class="hidden">
+  <div class="h-vitals grid1">
+    <div class="h-row"><label>혈액량</label><div class="bar" id="bBlood"><i></i></div><output id="vBlood">100</output></div>
+    <div class="h-row"><label>체력</label><div class="bar" id="bStam"><i></i></div><output id="vStam">100</output></div>
+    <div class="h-row"><label>심부체온</label><div class="bar cold" id="bTemp"><i></i></div><output id="vTemp">36.6</output></div>
+    <div class="h-row"><label>출혈</label><samp id="vBleed">없음</samp><samp class="r" id="vExpo">광견병 노출 · 없음</samp></div>
+    <div class="h-inv">
+      <div><kbd>Q</kbd><span>생수</span><output id="vWater">1</output></div>
+      <div><kbd>R</kbd><span>붕대</span><output id="vBand">0</output></div>
+      <div><kbd>F</kbd><span>손전등</span><output id="vTorch">ON</output></div>
+    </div>
+  </div>
+  <div class="h-route grid1">
+    <div class="h-rt"><samp>SEC 01</samp><b>양재동 ▸ 양재천 둔치</b></div>
+    <div class="track"><i id="trk"></i><span class="tick" style="left:23%"></span><span class="tick" style="left:50%"></span><span class="tick" style="left:72%"></span><span class="goal">◆</span></div>
+    <div class="h-rt"><samp id="vDist">잔여 000M</samp><samp id="vZone" class="zone">공수병 회피구역 밖</samp></div>
+  </div>
+  <div class="h-noise grid1">
+    <div class="h-row"><label>소음</label><div class="bar seg" id="bNoise"><i></i></div><output id="vNoise">0M</output></div>
+    <div class="h-row"><label>노출</label><div class="bar seg" id="bLit"><i></i></div><output id="vLit">어둠</output></div>
+  </div>
+  <div id="prompt" class="hidden"><kbd>E</kbd><span id="promptTxt">줍기</span></div>
+  <div class="h-log" id="log"></div>
+  <div id="alarm" class="hidden">[ 추격 ]</div>
+</section>
+
+<!-- PAUSE / HELP -->
+<section id="help" class="screen hidden">
+  <div class="panel">
+    <h2 class="macro-s">조작</h2>
+    <div class="stripe"></div>
+    <dl class="keys">
+      <dt>A / D · ← →</dt><dd>이동</dd>
+      <dt>SHIFT</dt><dd>달리기 — 체력 소모, 소음 9M</dd>
+      <dt>S · C · CTRL</dt><dd>웅크리기 — 소음·시야 감소, 바리케이드 밑 통과</dd>
+      <dt>SPACE · W</dt><dd>점프 — 차량 위로</dd>
+      <dt>E</dt><dd>줍기 · 읽기</dd>
+      <dt>Q</dt><dd>물 뿌리기 — 감염자 3초 경련(공수병)</dd>
+      <dt>J · 클릭</dt><dd>밀치기 — 체력 20</dd>
+      <dt>R</dt><dd>붕대 — 출혈 정지</dd>
+      <dt>F</dt><dd>손전등 — 시야↑ 눈에 띔↑</dd>
+      <dt>ESC · P</dt><dd>일시정지</dd>
+    </dl>
+    <p class="note">목표: 양재천 둔치(물가)까지 이동. 감염자는 물에서 10M 안으로 들어오지 못한다. 혈액량이 25 아래로 떨어지면 사망.</p>
+    <button id="btnHelpClose" class="row hot"><kbd>ESC</kbd><span id="helpCloseTxt">돌아가기</span><i>&lt;&lt;&lt;</i></button>
+  </div>
+</section>
+
+<!-- END -->
+<section id="end" class="screen hidden">
+  <div class="panel wide">
+    <samp id="eCode">STATUS / 0x00</samp>
+    <h2 class="macro" id="eTitle">사망</h2>
+    <div class="stripe"></div>
+    <p id="eCause" class="t-lede"></p>
+    <dl class="stats" id="eStats"></dl>
+    <div class="t-menu">
+      <button id="btnRetry" class="row hot"><kbd>01</kbd><span>다시 — 양재동</span><i>&gt;&gt;&gt;</i></button>
+      <button id="btnTitle" class="row"><kbd>02</kbd><span>타이틀</span><i>///</i></button>
+    </div>
+  </div>
+</section>
+
+<section id="loading" class="screen"><div class="panel"><samp>[ 수신 중 ]</samp><h2 class="macro-s" id="loadPct">00%</h2><div class="stripe"></div><samp>양재동 · 147.2MHz</samp></div></section>
+
+<div id="touch" class="hidden">
+  <div class="tl"><button data-t="left">◀</button><button data-t="right">▶</button><button data-t="crouch">웅크</button></div>
+  <div class="tr"><button data-t="run">달리기</button><button data-t="shove">밀치기</button><button data-t="splash">물</button><button data-t="interact">E</button><button data-t="torch">빛</button><button data-t="bandage">붕대</button><button data-t="jump" class="big">점프</button><button data-t="pause">II</button></div>
+</div>
+</body>
+</html>
