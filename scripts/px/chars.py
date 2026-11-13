@@ -15,6 +15,7 @@ PAL={
   'scarf':ramp('#520a0a','#8a1212','#c41a1a','#e8402c'),
   'pack':ramp('#262a19','#383e25','#4e5633','#677245'),
   'torch':ramp('#1c1e22','#363940','#575c66','#8a909c'),
+  'phone':ramp('#0c0c0e','#161618','#26262a','#3a3a40'),
   'glove':ramp('#141416','#222226','#34343a','#48484f'),
  },
  'inf_a':{ # hospital gown
@@ -63,7 +64,7 @@ def build(p, kind):
     sho=U(hip,lean,15)
     neck=U(sho,lean+g('head')*0.5,2.5)
     head=U(neck,lean+g('head'),5)
-    parts=[]
+    parts=[]; led=None; leddir=None
     def cap(a,b,r0,r1,z,mat,tag=None): parts.append(dict(a=a,b=b,r0=r0,r1=r1,z=z,mat=mat,tag=tag))
     # legs
     for side,z in (('B',-4),('F',4)):
@@ -90,9 +91,16 @@ def build(p, kind):
         cap(s0,elb,3.4,3.0,z,'coat','sleeve'); cap(elb,wr,3.0,2.6,z,'coat','sleeve')
         hand=P(wr,sa+la,2.0)
         cap(wr,hand,2.3,2.1,z+0.5,'glove' if kind=='player' else 'skin')
-        if kind=='player' and side=='F' and p.get('torch',True):
-            tip=P(hand,sa+la+1.5708*0.9,5.5)
-            cap(hand,tip,1.6,1.9,z+1,'torch','torch')
+        if kind=='player' and side=='F':
+            # smartphone slab in the front hand; LED at the far end
+            pang=sa+la+0.45
+            tail=P(hand,pang+math.pi,1.6)
+            tip=P(hand,pang,5.2)
+            cap(tail,tip,1.9,1.5,z+1.2,'phone','phone')
+            # slightly thicker body
+            mid=P(hand,pang,1.8)
+            cap(tail,mid,2.2,2.0,z+1.0,'phone','phone')
+            led,leddir=tip,(math.sin(pang),math.cos(pang))
     # head
     cap(neck,head,3.0,6.0,1,'skin','head')
     if kind=='player':
@@ -100,7 +108,7 @@ def build(p, kind):
         cap(s1,s2,3.6,3.2,1.2,'scarf')
         hood=(s1[0]-4.5,s1[1]+1.5)
         cap(s1,hood,3.0,2.6,-1,'scarf')
-    return parts, dict(hip=hip,sho=sho,neck=neck,head=head,lean=lean,headang=lean+g('head'))
+    return parts, dict(hip=hip,sho=sho,neck=neck,head=head,lean=lean,headang=lean+g('head'),led=led,leddir=leddir)
 
 def raster(parts, ox, oy, rot=0.0, piv=(0,0)):
     W,H=CW,CH
@@ -215,7 +223,17 @@ def render_frame(kind,p,rot=0.0,extra=None,fr=0):
             j=rng.integers(len(ys)); out[ys[j],xs[j],:3]=BLOOD
             if ys[j]+1<CH and out[ys[j]+1,xs[j],3]: out[ys[j]+1,xs[j],:3]=BLOOD*0.8
     outline(out)
-    return out,nrm
+    attach=None
+    if info.get('led') and info.get('leddir'):
+        cr,sr=math.cos(rot),math.sin(rot)
+        px0=ox+p.get('dx',0); py0=oy
+        lx,ly=info['led']
+        dx,dy=info['leddir']
+        ax=lx*cr-ly*sr+px0; ay=lx*sr+ly*cr+py0
+        adx=dx*cr-dy*sr; ady=dx*sr+dy*cr
+        n=math.hypot(adx,ady) or 1
+        attach=dict(x=round(ax,2),y=round(ay,2),dx=round(adx/n,3),dy=round(ady/n,3))
+    return out,nrm,attach
 
 S=math.sin; C=math.cos; PI=math.pi
 def walk(i,n,amp=0.5,bend=0.85,arm=0.45,lean=0.06,la=0.35,limp=0.0,head=0.0,torch=True,uaF0=0.0):
@@ -267,6 +285,15 @@ def inf_anims(kind):
     A['stagger']=[dict(lean=-0.3,head=-0.5,thF=0.3,shF=-0.3,thB=-0.5,shB=-0.3,uaF=1.0,laF=1.0,uaB=0.6,laB=1.2,dx=-2),
                   dict(lean=-0.1,head=-0.2,thF=0.5,shF=-0.6,thB=-0.3,shB=-0.4,uaF=0.6,laF=0.6,uaB=0.3,laB=0.8,dx=-1),
                   dict(lean=0.2,head=0.2,thF=0.3,shF=-0.6,thB=-0.1,shB=-0.4,uaF=0.4,laF=0.4,uaB=0.2,laB=0.4)]
+    # headbang into a wall, then collapse (U26)
+    A['bang']=[
+        dict(lean=0.7,head=0.85,thF=0.6,shF=-0.4,thB=-0.5,shB=-0.3,uaF=1.6,laF=0.2,uaB=1.2,laB=0.4,dx=3),
+        dict(lean=0.95,head=1.15,thF=0.35,shF=-0.2,thB=-0.7,shB=-0.2,uaF=1.8,laF=-0.1,uaB=1.5,laB=0.1,dx=5),
+        dict(lean=0.55,head=0.4,thF=0.9,shF=-1.1,thB=0.2,shB=-0.8,uaF=1.2,laF=0.6,uaB=0.8,laB=0.7,dx=2),
+        dict(lean=0.15,head=0.2,thF=0.7,shF=-1.3,thB=0.4,shB=-1.0,uaF=0.9,laF=1.0,uaB=0.5,laB=0.9,dx=0),
+    ]
+    down=dict(lean=0.0,head=0.3,thF=0.6,shF=-0.9,thB=0.3,shB=-0.7,uaF=0.9,laF=1.2,uaB=0.3,laB=0.6)
+    A['down']=[('rot',dict(down,head=0.25,uaF=1.0),1.52)]
     if kind=='inf_d':
         lie=dict(lean=0.0,head=0.3,thF=0.6,shF=-0.9,thB=0.3,shB=-0.7,uaF=0.9,laF=1.2,uaB=0.3,laB=0.6)
         A['lie']=[('rot',dict(lie,head=0.3+0.15*S(i*2.1),uaF=0.9+0.2*S(i*1.3)),1.45) for i in range(4)]
@@ -279,19 +306,22 @@ def sheet(kind,anims,fps):
     A=np.zeros((CH*len(rows),CW*ncol,4),np.uint8); Nm=np.zeros_like(A)
     meta={}
     for r,name in enumerate(rows):
+        leds=[]
         for c,fr in enumerate(anims[name]):
             rot=0.0
             if isinstance(fr,tuple): _,fr,rot=fr
-            o,n=render_frame(kind,fr,rot,fr=c)
+            o,n,att=render_frame(kind,fr,rot,fr=c)
             A[r*CH:(r+1)*CH,c*CW:(c+1)*CW]=o; Nm[r*CH:(r+1)*CH,c*CW:(c+1)*CW]=n
+            if att: leds.append(att)
         meta[name]={'row':r,'n':len(anims[name]),'fps':fps.get(name,8)}
+        if leds: meta[name]['led']=leds
     return A,Nm,meta
 
 if __name__=='__main__':
     import sys
     out='/workspace/seoul_survival/webgl/public/px/'
     allmeta={'cell':[CW,CH],'sheets':{}}
-    FPS={'idle':5,'walk':10,'run':14,'crouch':3,'crouchwalk':9,'jump':1,'land':1,'interact':10,'hurt':10,'splash':12,'shove':14,'dead':8,'lunge':12,'bite':10,'convulse':16,'stagger':10,'lie':3,'rise':8,'crawl':6}
+    FPS={'idle':5,'walk':10,'run':14,'crouch':3,'crouchwalk':9,'jump':1,'land':1,'interact':10,'hurt':10,'splash':12,'shove':14,'dead':8,'lunge':12,'bite':10,'convulse':16,'stagger':10,'lie':3,'rise':8,'crawl':6,'bang':16,'down':1}
     jobs=[('player',player_anims())]+[(k,inf_anims(k)) for k in ('inf_a','inf_b','inf_c','inf_d')]
     for kind,anims in jobs:
         A,Nm,meta=sheet(kind,anims,FPS)

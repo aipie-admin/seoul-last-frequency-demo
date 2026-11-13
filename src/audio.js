@@ -49,6 +49,12 @@ export class Audio {
   splash() { this.noise(0.5, 2500, 0.5, 0.18, 'highpass', 0.4); }
   bite() { this.noise(0.25, 200, 0.7, 0.5, 'lowpass'); this.tone(90, 0.3, 0.3, 'sine', 50); }
   bang(v) { this.noise(0.14, 160, 1, 0.35 * v, 'lowpass'); }
+  headbang() {
+    this.noise(0.32, 80, 0.7, 0.6, 'lowpass');
+    this.noise(0.22, 200, 1.1, 0.42, 'lowpass');
+    this.tone(68, 0.28, 0.32, 'sine', 36);
+    this.noise(0.14, 2000, 0.7, 0.14, 'highpass', 0.45);
+  }
   screech(v = 1) {
     const c = this.ctx; if (!c || v < 0.05) return; const now = c.currentTime;
     if (this._lastScreech && now - this._lastScreech < 0.4) return; this._lastScreech = now;

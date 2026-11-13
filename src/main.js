@@ -149,13 +149,13 @@ async function boot() {
     $('#news').classList.add('hidden');
     $('#hud').classList.remove('hidden');
     log('뉴스: 물리면 씻고 PEP. 소리·빛에 반응. 물을 두려워한다.', 'note');
-    log('[A/D] 이동  [F] 손전등  [E] 줍기  [Q] 물');
+    log('[A/D] 이동  [F] 휴대폰 플래시  [E] 줍기  [Q] 물');
   }
   const startGame = () => {
     audio.start(); game.enter('office'); rebuildScene(); rainAmt = 0; ui.logs = []; $('#log').innerHTML = '';
-    log('11월 · 17:12 · 서초 하천관리센터 2층. 해가 진다.');
+    log('11월 · 17:12 · 볼더스튜디오 2층, 양재1동. 해가 진다.');
     camX = Math.max(0, game.p.x - 200); camTop = game.w.ct0 ?? 108;
-    opening = 'flicker'; openT = 0; fading = null;
+    opening = 'flicker'; openT = 0; fading = null; phoneAim.inited = false;
     setMode('play');
     $('#hud').classList.add('hidden');
     $('#news').classList.add('hidden');
@@ -173,15 +173,49 @@ async function boot() {
   const lightsWorldOffice = office.lights.map(l => ({ ...l, i: l.cone ? l.i * 0.85 : l.i, z: l.cone ? 28 : 16, cos: 0.4 }));
   const tmpL = [];
   function lightsWorld() { return game.scene === 'office' ? lightsWorldOffice : lightsWorldStreet; }
-  function gatherLights(t) {
+
+  // 휴대폰 LED 부착점: 시트 프레임의 led(x,y,dx,dy). 발(GROUND=61) 기준, face 반전.
+  let phoneAim = { x: 0, y: 0, dx: 1, dy: 0.16, inited: false };
+  function phonePose(p) {
+    const sh = sheets.player; const A = sh.anims[p.anim] || sh.anims.idle;
+    let f = Math.floor(p.animT * A.fps);
+    const once = ['dead', 'interact', 'shove', 'splash', 'hurt'].includes(p.anim);
+    f = once ? Math.min(f, A.n - 1) : ((f % A.n) + A.n) % A.n;
+    const leds = A.led;
+    const led = leds && leds[Math.min(f, leds.length - 1)];
+    if (!led) return { x: p.x + p.face * 11, y: p.y - (p.crouch ? 20 : 31), dx: p.face, dy: 0.16 };
+    return {
+      x: p.x + p.face * (led.x - 32),
+      y: p.y - 61 + led.y,
+      dx: p.face * led.dx,
+      dy: led.dy,
+    };
+  }
+  function smoothPhone(p, dt) {
+    const raw = phonePose(p);
+    if (!phoneAim.inited) { Object.assign(phoneAim, raw, { inited: true }); return phoneAim; }
+    const k = Math.min(1, dt * 16);
+    phoneAim.x += (raw.x - phoneAim.x) * k;
+    phoneAim.y += (raw.y - phoneAim.y) * k;
+    phoneAim.dx += (raw.dx - phoneAim.dx) * k;
+    phoneAim.dy += (raw.dy - phoneAim.dy) * k;
+    const n = Math.hypot(phoneAim.dx, phoneAim.dy) || 1;
+    phoneAim.dx /= n; phoneAim.dy /= n;
+    return phoneAim;
+  }
+
+  function gatherLights(t, dt = 1/60) {
     tmpL.length = 0;
     const p = game.p;
     const push = (L) => { const sx = L.x - camX, sy = L.y - camTop; if (sx < -L.r || sx > R.W + L.r || sy < -L.r || sy > R.H + L.r) return; tmpL.push({ ...L, sx, sy }); };
     if (ui.mode !== 'title' && p.torch && !p.dead) {
-      const hx = p.x + p.face * 11, hy = p.y - (p.crouch ? 20 : 31);
-      const dy = 0.16; const n = Math.hypot(1, dy);
-      tmpL.push({ sx: hx - camX, sy: hy - camTop, r: 240, i: 1.8, c: [1.0, 0.95, 0.82], z: 10, cone: 1, dx: p.face / n, dy: dy / n, cos: 0.92, pri: 1e9 });
-      tmpL.push({ sx: hx - camX, sy: hy - camTop, r: 46, i: 0.35, c: [1, 0.95, 0.85], z: 16, cone: 0, pri: 1e9 });
+      const pose = smoothPhone(p, dt);
+      tmpL.push({ sx: pose.x - camX, sy: pose.y - camTop, r: 240, i: 1.8, c: [1.0, 0.95, 0.82], z: 10, cone: 1, dx: pose.dx, dy: pose.dy, cos: 0.92, pri: 1e9 });
+      tmpL.push({ sx: pose.x - camX, sy: pose.y - camTop, r: 46, i: 0.35, c: [1, 0.95, 0.85], z: 16, cone: 0, pri: 1e9 });
+      // tiny LED at the phone tip
+      tmpL.push({ sx: pose.x - camX, sy: pose.y - camTop, r: 8, i: 2.2, c: [1, 1, 0.95], z: 6, cone: 0, pri: 1e9 });
+    } else {
+      phoneAim.inited = false;
     }
     for (const L of lightsWorld()) { let i = L.i; if (L.flick) i *= (Math.sin(t * 37 + L.x) > 0.75 - L.flick * 4 ? 1 : 0.15 + 0.85 * (Math.sin(t * 3 + L.x) * 0.5 + 0.5)); push({ ...L, i, c: L.c, dx: 0, dy: 1 }); }
     for (const b of game.barrels) push({ x: b.x + 14, y: b.y + 8, r: 130, i: 1.25 + 0.25 * Math.sin(t * 13 + b.x) + 0.15 * Math.sin(t * 29), c: [1.0, 0.55, 0.22], z: 22, cone: 0 });
@@ -221,7 +255,7 @@ async function boot() {
     if (game.leaveOffice && !fading) {
       fading = 'to-street';
       $('#fade').classList.add('on'); $('#tutor').classList.add('hidden');
-      const keep = { blood: game.p.blood, bleed: game.p.bleed, exposed: game.p.exposed, water: Math.max(1, game.p.water), bandage: game.p.bandage, torch: game.p.torch, stats: { ...game.stats } };
+      const keep = { blood: game.p.blood, bleed: game.p.bleed, exposed: game.p.exposed, water: Math.max(1, game.p.water), bandage: game.p.bandage, torch: game.p.torch, battery: game.p.battery, powerBank: game.p.powerBank, battLogged: game.battLogged, stats: { ...game.stats } };
       setTimeout(() => {
         game.enter('street', keep);
         if (keep.stats) game.stats = keep.stats;
@@ -253,7 +287,7 @@ async function boot() {
     const sh = game.shake * 3;
     const cX = Math.round(camX + (Math.random() - 0.5) * sh), cT = Math.round(camTop + (Math.random() - 0.5) * sh);
     const saveX = camX, saveT = camTop; camX = cX; camTop = cT;
-    const Ls = gatherLights(t);
+    const Ls = gatherLights(t, dt);
     // layers
     const inOff = game.scene === 'office';
     for (const L of layers) {
@@ -284,7 +318,7 @@ async function boot() {
     // characters
     game.enemies.forEach((e, i) => {
       const m = enemyMeshes[i];
-      setFrame(m, e.k, e.anim, e.animT, e.face, e.anim === 'rise' || e.anim === 'lunge');
+      setFrame(m, e.k, e.anim, e.animT, e.face, e.anim === 'rise' || e.anim === 'lunge' || e.anim === 'bang' || e.anim === 'down');
       m.position.set(Math.round(e.x - cX), Math.round(e.y - cT - 61 + 32), 0);
       m.material.uniforms.uFlash.value = 0;
       blobs[i].position.set(Math.round(e.x - cX), Math.round(e.y - cT), 0); blobs[i].visible = e.anim !== 'lie';
@@ -322,12 +356,12 @@ async function boot() {
     if (p.anim === 'jump') t.jump = true;
     if (game.prompt && game.prompt.k === 'water') t.water = true;
     let key, txt;
-    if (!t.torch) { key = 'F'; txt = '손전등 — 시야를 밝혀라'; }
+    if (!t.torch) { key = 'F'; txt = '휴대폰 플래시 — 시야를 밝혀라'; }
     else if (!t.move) { key = 'A / D'; txt = '이동'; }
     else if (game.prompt && game.prompt.k === 'water') { key = 'E'; txt = '줍기 — 생수 500ml'; }
     else if (p.x > 490 && p.x < 590 && !t.jump) { key = 'SPACE'; txt = '점프 — 넘어가기'; }
     else if (p.run && t.move) { key = 'SHIFT'; txt = '달리기 — 발소리가 커진다'; t.run = true; }
-    else if (nearInf && p.water > 0 && !t.splash) { key = 'Q'; txt = '물 뿌리기 — 감염자는 물을 두려워한다'; }
+    else if (nearInf && p.water > 0 && !t.splash) { key = 'Q'; txt = '물 뿌리기 — 맞으면 달아나고, 벽에 부딪히면 쓰러진다'; }
     else if (nearInf) { key = '!'; txt = '문 앞의 감염자. 소리에 반응한다'; }
     else { el.classList.add('hidden'); return; }
     if (p.act === 'splash') t.splash = true;
@@ -341,12 +375,11 @@ async function boot() {
   function hud(t) {
     if (t - hudT < 0.08) return; hudT = t;
     const p = game.p;
-    bar('#bBlood', (p.blood - 25) / 75 * 100, p.blood < 50); $('#vBlood').textContent = Math.max(0, Math.round(p.blood));
+    const bat = p.battery ?? 100;
+    bar('#bBatt', bat, bat < 15); $('#vBatt').textContent = Math.round(bat) + '%';
     bar('#bStam', p.stamina, p.stamina < 20); $('#vStam').textContent = Math.round(p.stamina);
     const rn = game.rain; bar('#bTemp', rn.on ? rn.t / rn.dur * 100 : 0, false); $('#vTemp').textContent = rn.on ? Math.ceil(rn.t) + 's' : '—';
     $('#lTemp').textContent = rn.on ? '비 · 위축' : '날씨 · 맑음';
-    $('#vBleed').textContent = p.bleed > 0.05 ? `진행 −${p.bleed.toFixed(1)}/s` : '없음';
-    $('#vBleed').style.color = p.bleed > 0.05 ? 'var(--red)' : '';
     $('#vExpo').textContent = p.exposed ? '광견병 노출 · 확인됨' : '광견병 노출 · 없음';
     $('#vExpo').style.color = p.exposed ? 'var(--red)' : 'var(--dim)';
     $('#vWater').textContent = p.water; $('#vBand').textContent = p.bandage; $('#vTorch').textContent = p.torch ? 'ON' : 'OFF';
@@ -371,7 +404,7 @@ async function boot() {
       ? `혈액량 ${Math.max(0, Math.round(p.blood))} — 양재동 ${Math.round(p.x / M)}M 지점에서 쓰러졌다.${p.exposed ? '<br/><b>광견병 노출 상태였다.</b> 살아남았더라도 PEP가 필요했다.' : ''}`
       : `양재천 둔치. 감염자들이 물가 앞에서 멈춰 경련한다 — 공수병.${p.exposed ? '<br/><b>광견병 노출.</b> 증상 전에 PEP를 찾아야 한다.' : ''}<br/>다음 구간: SEC 02 서초동 [미구현]`;
     const tt = game.t; const mm = Math.floor(tt / 60), ss = Math.floor(tt % 60);
-    $('#eStats').innerHTML = [['소요', `${mm}:${String(ss).padStart(2, '0')}`], ['물림', s.bites], ['혈액량', Math.max(0, Math.round(p.blood))], ['이동', Math.round((p.x - 70) / M) + 'M']].map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('');
+    $('#eStats').innerHTML = [['소요', `${mm}:${String(ss).padStart(2, '0')}`], ['물림', s.bites], ['배터리', Math.round(p.battery ?? 0) + '%'], ['이동', Math.round((p.x - 70) / M) + 'M']].map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('');
     setMode(kind);
   }
   requestAnimationFrame(frame);

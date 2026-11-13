@@ -28,8 +28,9 @@ export class Game {
     this.p = {
       x: m.start.x, y: w.feet, vx: 0, vy: 0, face: m.start.face || 1, onGround: true, crouch: false, run: false,
       blood: 100, stamina: 100, temp: 36.6, bleed: 0, exposed: false, water: 0, bandage: 0,
-      torch: false, anim: 'idle', animT: 0, actT: 0, act: null, hurtT: 0, landT: 0, noise: 0, noiseShow: 0, lit: 0, dead: false, coyote: 0, jumpBuf: 0, invT: 0,
+      torch: false, battery: 100, powerBank: 0, charging: false, anim: 'idle', animT: 0, actT: 0, act: null, hurtT: 0, landT: 0, noise: 0, noiseShow: 0, lit: 0, dead: false, coyote: 0, jumpBuf: 0, invT: 0,
     };
+    this.battLogged = false;
     this.props = []; this.barrels = [];
     this.solids = (m.solids || []).map(b => ({ ...b }));
     this.items = (m.items || []).map(it => ({ ...it, taken: false, y: it.y ?? w.feet }));
@@ -51,8 +52,9 @@ export class Game {
       x: 70, y: w.feet, vx: 0, vy: 0, face: 1, onGround: true, crouch: false, run: false,
       blood: keep ? keep.blood : 100, stamina: 100, temp: 36.6, bleed: keep ? keep.bleed : 0, exposed: keep ? keep.exposed : false,
       water: keep ? keep.water : 1, bandage: keep ? keep.bandage : 0,
-      torch: keep ? keep.torch : true, anim: 'idle', animT: 0, actT: 0, act: null, hurtT: 0, landT: 0, noise: 0, noiseShow: 0, lit: 0, dead: false, coyote: 0, jumpBuf: 0, invT: 0,
+      torch: keep ? keep.torch : true, battery: keep && keep.battery != null ? keep.battery : 100, powerBank: keep && keep.powerBank != null ? keep.powerBank : 0, charging: false, anim: 'idle', animT: 0, actT: 0, act: null, hurtT: 0, landT: 0, noise: 0, noiseShow: 0, lit: 0, dead: false, coyote: 0, jumpBuf: 0, invT: 0,
     };
+    this.battLogged = !!(keep && keep.battLogged);
     // props: [key, x]
     const P = [['car_white', 760], ['barricade', 1640], ['car_dark', 2050], ['car_taxi', 2950], ['ambulance', 3700], ['car_red', 4560]];
     this.props = P.map(([k, x]) => {
@@ -163,7 +165,27 @@ export class Game {
     p.noiseShow = Math.max(p.noise, p.noiseShow - 140 * dt);
     if (moving) { p.stepAcc = (p.stepAcc || 0) + Math.abs(p.vx) * dt; if (p.stepAcc > (p.run ? 26 : 22)) { p.stepAcc = 0; this.audio.step((p.crouch ? 0.35 : p.run ? 1.1 : 0.7) * (onPile ? 1.8 : 1), onPile); } }
     // actions
-    if (inp.torchPressed) { p.torch = !p.torch; this.audio.click(); this.log(p.torch ? '손전등 ON — 시야 확보, 감염자 주의 유발' : '손전등 OFF — 어둠 속 은신'); }
+    // 휴대폰 배터리: 손전등 끄면 4게임일(실 8시간)에 100→0, 켜면 ×1.4. 충전 중엔 자체 소모 정지.
+    const BATTERY_IDLE = 100 / 28800; // %/real-sec
+    const CHARGE_PCT = 40 / 300;      // 게임시당 +40%
+    if (p.battery == null) p.battery = 100;
+    if (p.powerBank == null) p.powerBank = 0;
+    if (p.charging) {
+      p.battery = Math.min(100, p.battery + CHARGE_PCT * dt);
+    } else if (p.powerBank > 0 && p.battery < 100) {
+      const add = Math.min(CHARGE_PCT * dt, p.powerBank, 100 - p.battery);
+      p.battery += add; p.powerBank -= add;
+    } else {
+      p.battery = Math.max(0, p.battery - BATTERY_IDLE * (p.torch ? 1.4 : 1) * dt);
+    }
+    if (p.torch && p.battery <= 0) {
+      p.torch = false;
+      if (!this.battLogged) { this.battLogged = true; this.log('휴대폰 배터리 방전 — 플래시 꺼짐'); }
+    }
+    if (inp.torchPressed) {
+      if (!p.torch && p.battery <= 0) { this.audio.click(); this.log('배터리가 없다 — 휴대폰 플래시를 켤 수 없다'); }
+      else { p.torch = !p.torch; this.audio.click(); this.log(p.torch ? '휴대폰 플래시 ON — 시야 확보, 감염자 주의 유발' : '휴대폰 플래시 OFF — 어둠 속 은신'); }
+    }
     if (inp.shovePressed && !busy && p.stamina >= 20) this.shove();
     if (inp.splashPressed && !busy) this.splash();
     if (inp.bandagePressed && !busy) this.useBandage();
@@ -216,11 +238,25 @@ export class Game {
     this.emitNoise(4 * M); this.audio.splash();
     this.splashes.push({ x: p.x + p.face * 16, y: p.y - 30, face: p.face, t: 0 });
     let hit = 0;
+    const RANGE = 6 * M, PB = 2 * M, COS75 = Math.cos(75 * Math.PI / 180);
+    const ox = p.x, oy = p.y - 28, dirX = p.face, dirY = 0;
     for (const e of this.enemies) {
-      const dx = (e.x - p.x) * p.face;
-      if (dx > -6 && dx < 52 && Math.abs(e.y - p.y) < 34) { e.state = 'convulse'; e.st = 3.0; e.vx = p.face * 40; e.face = -p.face; hit++; this.audio.screech(0.6); }
+      if (e.state === 'bang' || e.state === 'down') continue;
+      const dx = e.x - ox, dy = (e.y - 28) - oy;
+      const dist = Math.hypot(dx, dy);
+      let ok = false;
+      if (dist <= PB) ok = true;
+      else if (dist <= RANGE) {
+        const dlen = Math.hypot(dirX, dirY) || 1;
+        const cos = (dx * dirX + dy * dirY) / (dist * dlen);
+        ok = cos >= COS75;
+      }
+      if (!ok) continue;
+      const away = Math.sign(e.x - p.x) || -p.face;
+      e.state = 'flee'; e.st = 4.0; e.fleeDir = away; e.face = away; e.vx = away * 5.5 * M; e.anim = 'run'; e.animT = 0;
+      hit++; this.audio.screech(0.7);
     }
-    this.log(hit ? `물 500ml 투척 — 감염자 ${hit} 경련(공수병)` : '물 500ml 투척 — 빗나감');
+    this.log(hit ? `물 500ml — 감염자 ${hit} 패닉, 전속 도주` : '물 500ml 투척 — 빗나감');
   }
   useBandage() {
     const p = this.p;
@@ -231,7 +267,7 @@ export class Game {
   }
   take(it) {
     const p = this.p; it.taken = true; this.stats.items++; p.act = 'interact'; p.actT = 0.4; p.animT = 0; this.audio.pickup();
-    if (it.k === 'water') { p.water++; this.log('획득: 생수 500ml — [Q] 감염자에게 뿌리면 경련'); }
+    if (it.k === 'water') { p.water++; this.log('획득: 생수 500ml — [Q] 맞으면 전속 도주, 벽에 부딪히면 사망'); }
     if (it.k === 'bandage') { p.bandage++; this.log('획득: 압박 붕대 — [R] 출혈 정지'); }
     if (it.k === 'note' || it.k === 'radio') this.log(NOTES[it.note], 'note');
   }
@@ -252,7 +288,7 @@ export class Game {
     const close = !p.dead && adx < 1.2 * M && dy < 40;
     const aware = sees || hears || close;
     let mv = 0, anim = 'idle';
-    if (this.rain.on && !['lie', 'rise', 'cower', 'hydro'].includes(e.state) && Math.abs(e.x - p.x) < 700) { e.state = 'cower'; e.st = 0.8 + Math.random() * 1.2; this.audio.screech(0.25); }
+    if (this.rain.on && !['lie', 'rise', 'cower', 'hydro', 'flee', 'bang', 'down'].includes(e.state) && Math.abs(e.x - p.x) < 700) { e.state = 'cower'; e.st = 0.8 + Math.random() * 1.2; this.audio.screech(0.25); }
     switch (e.state) {
       case 'cower': {
         // 빗속 위축: 경련 후 웅크린 채 뒷걸음, 추격 중단
@@ -292,6 +328,16 @@ export class Game {
       case 'bite': anim = 'bite'; if (e.st <= 0) e.state = 'chase'; break;
       case 'stagger': anim = 'stagger'; e.vx *= Math.pow(0.02, dt); mv = e.vx; if (e.st <= 0) { e.state = 'chase'; } break;
       case 'convulse': anim = 'convulse'; e.vx *= Math.pow(0.05, dt); mv = e.vx; if (e.st <= 0) { e.state = 'chase'; e.lungeCd = 1.5; } break;
+      case 'flee': {
+        // U26 / systems waterFlee: 4초 전속 질주, 벽이면 머리 충돌 사망
+        const away = e.fleeDir || (Math.sign(e.x - p.x) || e.face);
+        e.face = away; e.fleeDir = away;
+        mv = away * 5.5 * M; anim = e.para ? 'crawl' : 'run';
+        if (e.st <= 0) { e.state = 'search'; e.home = e.x; e.st = 2; e.fleeDir = 0; }
+        break;
+      }
+      case 'bang': anim = 'bang'; mv = 0; if (e.st <= 0) { e.state = 'down'; e.st = 9999; e.anim = 'down'; e.animT = 0; } break;
+      case 'down': anim = 'down'; mv = 0; break;
       case 'hydro': {
         // 공수병: 물가 접근 불가 — 경련 후 물러나 노려봄
         anim = e.st > 0 ? 'convulse' : 'idle'; mv = e.st > 0 ? -18 : 0; e.face = 1;
@@ -301,17 +347,28 @@ export class Game {
     }
     if (e.para && anim === 'run') anim = 'crawl';
     if (e.para && (anim === 'walk' || anim === 'lunge')) anim = 'crawl';
-    if (e.para && !['lie', 'rise', 'crawl', 'bite', 'stagger', 'convulse'].includes(anim)) anim = 'crawl';
-    // hydrophobia boundary
-    if (e.x + mv * dt > HYD && mv > 0 && e.state !== 'hydro') {
+    if (e.para && !['lie', 'rise', 'crawl', 'bite', 'stagger', 'convulse', 'flee', 'bang', 'down'].includes(anim)) anim = 'crawl';
+    // hydrophobia boundary — do not interrupt waterFlee / headSmash
+    if (e.x + mv * dt > HYD && mv > 0 && !['hydro', 'flee', 'bang', 'down'].includes(e.state)) {
       e.state = 'hydro'; e.st = 1.4; mv = 0; this.audio.screech(0.5);
       if (!this.hydroLogged) { this.hydroLogged = true; this.log('감염자가 물가 앞에서 경련한다 — 공수병. 물가로!', 'safe'); }
     }
     // move & collide
     const hw = 6, hh = e.para && e.state !== 'chase' ? 20 : 44;
     const before = e.x;
+    // scene bounds count as walls for headSmash
+    if (e.state === 'flee') {
+      const minX = 8, maxX = this.maxX();
+      if (e.x + mv * dt <= minX || e.x + mv * dt >= maxX) {
+        e.x = mv < 0 ? minX + hw : maxX - hw;
+        this.headSmash(e);
+        return;
+      }
+    }
     const hit = this.collideX(e, hw, e.para ? 22 : hh, mv * dt);
-    if (hit && (e.state === 'chase' || e.state === 'lunge')) {
+    if (e.state === 'flee' && hit) {
+      this.headSmash(e);
+    } else if (hit && (e.state === 'chase' || e.state === 'lunge')) {
       const height = this.ground(e.x) - hit.y0;
       e.blocked += dt;
       if (height < 48 && e.blocked > 0.5 && e.vy === 0 && !e.para) { e.vy = -290; e.blocked = 0; }   // vault over cars
@@ -319,8 +376,17 @@ export class Game {
     } else e.blocked = 0;
     e.vy += 980 * dt;
     if (this.collideY(e, hw, 30, e.vy * dt)) e.vy = 0;
-    if (e.x > HYD + 2) e.x = HYD + 2;
+    if (e.x > HYD + 2 && e.state !== 'flee' && e.state !== 'bang' && e.state !== 'down') e.x = HYD + 2;
+    if (e.state === 'bang') anim = 'bang';
+    if (e.state === 'down') anim = 'down';
     if (anim !== e.anim) { e.anim = anim; e.animT = 0; }
+  }
+  headSmash(e) {
+    if (e.state === 'bang' || e.state === 'down') return;
+    e.state = 'bang'; e.st = 0.28; e.vx = 0; e.fleeDir = 0; e.anim = 'bang'; e.animT = 0;
+    this.shake = Math.max(this.shake, 0.9);
+    this.audio.headbang();
+    this.log('감염자가 벽에 머리를 박고 쓰러진다', 'alert');
   }
   bite(e) {
     const p = this.p;

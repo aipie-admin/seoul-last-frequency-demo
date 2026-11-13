@@ -47,16 +47,33 @@ async def main():
         await shot(pg,'11_controls',800)
 
         # door infected
-        await pg.evaluate("()=>{const g=window.__game; g.p.x=700; g.p.face=1; g.p.torch=true; g.p.water=1; g.tut.torch=true; g.tut.move=true;}")
+        await pg.evaluate("()=>{const g=window.__game; g.p.x=700; g.p.face=1; g.p.torch=true; g.p.water=2; g.tut.torch=true; g.tut.move=true; g.god=true; const e=g.enemies[0]; if(e){e.x=800;e.y=g.w.feet;e.state='idle';e.face=-1;}}")
         await pg.wait_for_timeout(1000)
         await shot(pg,'12_door',800)
+
+        # U26: splash → flee, then wall headSmash
+        await pg.evaluate("()=>{const g=window.__game; g.p.x=700; g.p.y=g.w.feet; g.p.face=1; g.p.water=Math.max(2,g.p.water); g.p.act=null; g.p.actT=0; g.god=true; const e=g.enemies[0]; if(e){e.x=800;e.y=g.w.feet;e.state='idle';e.st=0;e.face=-1;} g.splash();}")
+        await pg.wait_for_timeout(450)
+        await shot(pg,'14_flee',200)
+        await pg.wait_for_function("()=>{const e=window.__game.enemies[0]; return e && (e.state==='bang'||e.state==='down');}", timeout=6000)
+        await pg.wait_for_timeout(80)
+        await shot(pg,'15_wall_death',250)
 
         # go to street (side-view after)
         await pg.evaluate("()=>{window.__toStreet();}")
         await pg.wait_for_timeout(1400)
-        await pg.evaluate("()=>{const g=window.__game; g.p.x=220; g.p.torch=true; g.god=true;}")
+        await pg.evaluate("()=>{const g=window.__game; g.p.x=220; g.p.torch=true; g.p.battery=100; g.god=true;}")
         await pg.keyboard.down('KeyD'); await pg.wait_for_timeout(1800); await pg.keyboard.up('KeyD')
         await shot(pg,'02_street',800)
+
+        # U27: running beam follows phone/arm
+        await pg.evaluate("()=>{const g=window.__game; g.p.x=380; g.p.face=1; g.p.torch=true; g.p.battery=100; g.god=true; g.p.stamina=100;}")
+        await pg.keyboard.down('ShiftLeft')
+        await pg.keyboard.down('KeyD')
+        await pg.wait_for_timeout(900)
+        await shot(pg,'16_beam_run',150)
+        await pg.keyboard.up('KeyD')
+        await pg.keyboard.up('ShiftLeft')
 
         # leaves (stay on street, look at trees)
         await pg.evaluate("()=>{const g=window.__game; g.p.x=900; g.god=true;}")
