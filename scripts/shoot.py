@@ -1,37 +1,89 @@
-import asyncio, sys
+import asyncio, sys, os
 from playwright.async_api import async_playwright
+from PIL import Image
 URL=sys.argv[1] if len(sys.argv)>1 else 'http://localhost:4791/'
 OUT='/workspace/seoul_survival/webgl/shots/'
+os.makedirs(OUT, exist_ok=True)
+
+async def to_webp(path_png):
+    im=Image.open(path_png).convert('RGB')
+    webp=path_png.rsplit('.',1)[0]+'.webp'
+    im.save(webp,'WEBP',quality=90,method=4)
+    os.remove(path_png)
+    return webp
+
+async def shot(pg, name, wait=400):
+    await pg.wait_for_timeout(wait)
+    png=OUT+name+'.png'
+    await pg.screenshot(path=png)
+    return await to_webp(png)
+
 async def main():
     async with async_playwright() as p:
-        b=await p.chromium.launch(args=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--autoplay-policy=no-user-gesture-required'])
+        b=await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--autoplay-policy=no-user-gesture-required','--no-sandbox'])
         pg=await b.new_page(viewport={'width':1280,'height':720})
         errs=[]
         pg.on('console',lambda m: errs.append(f'{m.type}: {m.text}') if m.type in ('error','warning') else None)
         pg.on('pageerror',lambda e: errs.append(f'pageerror: {e}'))
-        await pg.goto(URL); 
-        await pg.wait_for_selector('#loading.hidden',state='attached',timeout=60000)
+        await pg.goto(URL)
+        await pg.wait_for_selector('#loading.hidden',state='attached',timeout=90000)
         await pg.wait_for_timeout(2500)
-        await pg.screenshot(path=OUT+'01_title.png')
-        await pg.click('#btnStart'); await pg.wait_for_timeout(800)
-        await pg.keyboard.down('KeyD'); await pg.wait_for_timeout(2600); await pg.keyboard.up('KeyD')
-        await pg.screenshot(path=OUT+'02_street.png')
-        # teleport for coverage shots
+        await shot(pg,'01_title',800)
+
+        await pg.click('#btnStart')
+        # flicker then news
+        await pg.wait_for_function("()=>!document.querySelector('#news').classList.contains('hidden')", timeout=8000)
+        await shot(pg,'10_news',700)
+
+        await pg.evaluate("()=>window.__skipNews&&window.__skipNews()")
+        await pg.wait_for_function("()=>document.querySelector('#news').classList.contains('hidden')", timeout=5000)
+        await pg.wait_for_timeout(600)
+        # office interior, turn on torch for visibility
+        await pg.evaluate("()=>{const g=window.__game; g.p.torch=true;}")
+        await shot(pg,'09_office',900)
+
+        # control prompt (move / flashlight already done; show A/D or jump area)
+        await pg.evaluate("()=>{const g=window.__game; g.p.x=250; g.p.torch=true; g.tut.torch=true; g.tut.move=false;}")
+        await shot(pg,'11_controls',800)
+
+        # door infected
+        await pg.evaluate("()=>{const g=window.__game; g.p.x=700; g.p.face=1; g.p.torch=true; g.p.water=1; g.tut.torch=true; g.tut.move=true;}")
+        await pg.wait_for_timeout(1000)
+        await shot(pg,'12_door',800)
+
+        # go to street (side-view after)
+        await pg.evaluate("()=>{window.__toStreet();}")
+        await pg.wait_for_timeout(1400)
+        await pg.evaluate("()=>{const g=window.__game; g.p.x=220; g.p.torch=true; g.god=true;}")
+        await pg.keyboard.down('KeyD'); await pg.wait_for_timeout(1800); await pg.keyboard.up('KeyD')
+        await shot(pg,'02_street',800)
+
+        # leaves (stay on street, look at trees)
+        await pg.evaluate("()=>{const g=window.__game; g.p.x=900; g.god=true;}")
+        await pg.wait_for_timeout(2000)
+        await shot(pg,'13_leaves',800)
+
         await pg.evaluate("()=>{const g=window.__game; g.p.x=1060; g.god=true; }"); await pg.wait_for_timeout(1500)
-        await pg.screenshot(path=OUT+'03_infected.png')
+        await shot(pg,'03_infected',600)
+
         await pg.evaluate("()=>{const g=window.__game; g.p.x=2480; }"); await pg.wait_for_timeout(2600)
-        await pg.screenshot(path=OUT+'04_rain.png')
+        await shot(pg,'04_rain',600)
+
         await pg.evaluate("()=>{const g=window.__game; g.rain.on=false; g.rain.next=999; g.p.x=3300; g.enemies.forEach(e=>{if(e.x<3000)e.x=200});}"); await pg.wait_for_timeout(2400)
-        await pg.screenshot(path=OUT+'05_station.png')
+        await shot(pg,'05_station',600)
+
         await pg.evaluate("()=>{const g=window.__game; g.p.x=5560; g.p.blood=100; g.p.bleed=0; g.god=true; }")
         await pg.keyboard.down('KeyD'); await pg.wait_for_timeout(1800); await pg.keyboard.up('KeyD')
-        await pg.screenshot(path=OUT+'06_stream.png')
+        await shot(pg,'06_stream',600)
+
         await pg.evaluate("()=>{window.__game.p.x=5790;}")
         await pg.keyboard.down('KeyD'); await pg.wait_for_timeout(3000); await pg.keyboard.up('KeyD')
         await pg.wait_for_timeout(1800)
-        await pg.screenshot(path=OUT+'07_win.png')
+        await shot(pg,'07_win',600)
+
         fps=await pg.evaluate("()=>new Promise(r=>{let n=0;const t0=performance.now();function f(){n++; if(performance.now()-t0<2000) requestAnimationFrame(f); else r(n/2);} requestAnimationFrame(f);})")
         print('fps(swiftshader)',fps)
-        print('ERRORS:' if errs else 'NO CONSOLE ERRORS'); [print(' ',e) for e in errs[:30]]
+        print('ERRORS:' if errs else 'NO CONSOLE ERRORS');
+        [print(' ',e) for e in errs[:40]]
         await b.close()
 asyncio.run(main())

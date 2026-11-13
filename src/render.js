@@ -198,27 +198,28 @@ export class Renderer {
       void main(){
         vec2 sp=vec2(gl_FragCoord.x, uRes.y-gl_FragCoord.y);
         vec2 w=sp+vec2(uCamX,uCamY);
-        if(w.x<uX0 || w.y<uY0) discard;
-        float depth=(w.y-uY0);
-        vec3 base=mix(vec3(0.020,0.035,0.06),vec3(0.006,0.010,0.02),clamp(depth/60.0,0.0,1.0));
-        // ripples: horizontal broken lines
-        float rip=step(0.72,vnoise(vec2(w.x*0.06+uTime*0.6, floor(w.y/2.0)*1.7)))*step(mod(w.y,3.0),1.0);
-        vec3 col=base+rip*vec3(0.05,0.07,0.10);
-        // light reflections: wobbling vertical streaks
+        if(w.x<uX0 || w.y<uY0-2.0) discard;
+        float depth=max(0.0,w.y-uY0);
+        // side-view water body: dark below a thin horizontal surface
+        vec3 base=mix(vec3(0.06,0.10,0.14),vec3(0.010,0.018,0.03),clamp(depth/50.0,0.0,1.0));
+        float wave=sin(w.x*0.11+uTime*0.7)*1.2 + sin(w.x*0.31+uTime*1.1)*0.5;
+        float surface=1.0-smoothstep(0.0,3.0,abs((w.y-uY0)-wave));
+        vec3 col=base;
+        col=mix(col,vec3(0.28,0.34,0.40),surface*0.85);
+        // horizontal caustics (profile bands, not top-down rings)
+        float cau=step(0.7,vnoise(vec2(w.x*0.04+uTime*0.15, floor((w.y-uY0)/3.0)*0.7)));
+        col+=cau*vec3(0.04,0.06,0.08)*(1.0-clamp(depth/40.0,0.0,1.0));
         for(int i=0;i<${MAXL};i++){ if(i>=uNL) break;
-          vec4 P=uLP[i]; float dx=abs(sp.x-P.x + sin(w.y*0.7+uTime*3.0+float(i))*2.0*(1.0+depth*0.08));
-          float wid=2.0+depth*0.12; float s=step(dx,wid)*step(0.45,vnoise(vec2(w.x*0.3,w.y*0.9-uTime*1.5)));
-          float f=clamp(1.0-abs(P.x-sp.x)/400.0,0.0,1.0);
-          col+=uLC[i].rgb*uLC[i].a*s*0.35*f*(1.0-clamp(depth/70.0,0.0,0.8));
+          vec4 P=uLP[i]; float dx=abs(sp.x-P.x);
+          float f=clamp(1.0-dx/280.0,0.0,1.0)*clamp(1.0-abs(P.y-(uY0-uCamY))/80.0,0.0,1.0);
+          col+=uLC[i].rgb*uLC[i].a*f*0.18*(1.0-clamp(depth/50.0,0.0,0.85))*surface;
         }
-        // floating leaves
-        float lf=hash12(floor(vec2(w.x-uTime*6.0,w.y)*vec2(0.5,1.0)));
-        if(lf>0.985) col=mix(vec3(0.55,0.38,0.06),vec3(0.5,0.12,0.05),step(0.993,lf))*0.6;
-        // rain rings
-        vec2 cell=floor(w/vec2(10.0,4.0)); float ph=fract(uTime*1.3+hash12(cell)*7.0);
-        float ring=step(abs(length((w-cell*vec2(10.0,4.0)-vec2(5.0,2.0))*vec2(1.0,2.5))-ph*5.0),0.6)*(1.0-ph)*uRain;
-        col+=ring*vec3(0.18,0.2,0.24);
-        if(w.y<uY0+1.0) col=vec3(0.30,0.32,0.36)*0.6;
+        // leaves drifting on the surface line
+        float lf=hash12(floor(vec2(w.x-uTime*1.4,uY0)*vec2(0.35,1.0)));
+        if(lf>0.988 && abs(w.y-uY0-wave)<2.5) col=mix(vec3(0.55,0.38,0.06),vec3(0.5,0.12,0.05),step(0.995,lf))*0.7;
+        // rain hits the surface only
+        float drop=step(0.96,hash12(floor(vec2(w.x*0.5,floor(uTime*6.0)))))*uRain;
+        if(drop>0.5 && abs(w.y-uY0)<3.0) col+=vec3(0.16,0.18,0.22);
         float b=bayer4(gl_FragCoord.xy); col=floor(col*24.0+b)/24.0;
         gl_FragColor=vec4(col,1.0);
       }`, { uCamX: { value: 0 }, uCamY: { value: 0 }, uX0: { value: world.water }, uY0: { value: world.low + 6 }, uRain: { value: 0 } }, order);
@@ -235,10 +236,11 @@ export class Renderer {
         ${LIGHT_UNI}
         void main(){
           float W=uRes.x+60.0, H=uRes.y+40.0;
-          float t=uTime*uSpeed*(0.6+0.8*seed.z);
-          float gust=sin(uTime*0.35+seed.w*3.0)*0.5+0.5;
-          float x=mod(seed.x*W + t*uWind*(0.6+gust) + sin(t*0.09+seed.w*20.0)*18.0 - uCamX*uPar, W)-30.0;
-          float y=mod(seed.y*H + t*(1.0+uRain*1.5) - uCamY*uPar, H)-20.0;
+          float t=uTime*uSpeed*(0.45+0.55*seed.z);
+          float gust=sin(uTime*0.12+seed.w*3.0)*0.5+0.5;
+          float sway=sin(uTime*(0.32+seed.w*0.35)+seed.x*6.0)*22.0 + sin(uTime*(0.7+seed.z*0.4)+seed.w*11.0)*8.0;
+          float x=mod(seed.x*W + t*uWind*(0.3+0.45*gust) + sway - uCamX*uPar, W)-30.0;
+          float y=mod(seed.y*H + t*(0.32+uRain*0.7) + sin(t*0.14+seed.w)*10.0 - uCamY*uPar, H)-20.0;
           x=floor(x)+0.5; y=floor(y)+0.5;
           vec3 acc=vec3(0.0);
           for(int i=0;i<${MAXL};i++){ if(i>=uNL) break; vec4 P=uLP[i]; vec2 d=vec2(x,y)-P.xy; float dist=length(d); if(dist>P.w*1.2) continue;
@@ -247,13 +249,13 @@ export class Renderer {
           float k=fract(seed.w*7.31);
           vec3 base = k<0.45 ? vec3(0.85,0.62,0.10) : k<0.7 ? vec3(0.70,0.18,0.08) : k<0.88 ? vec3(0.45,0.28,0.14) : vec3(0.95,0.78,0.25);
           vC=base*(0.18+acc*1.6); vA=1.0;
-          vFlip=step(0.0,sin(uTime*(3.0+seed.z*6.0)+seed.x*40.0)); // tumbling: flat <-> edge
+          vFlip=step(0.0,sin(uTime*(0.85+seed.z*1.5)+seed.x*40.0)); // slow tumble: flat <-> edge
           gl_PointSize= uSize*(seed.z>0.8?2.0:1.0);
           gl_Position=projectionMatrix*viewMatrix*vec4(x,y,0.0,1.0);
         }`,
       fragmentShader: `precision highp float; varying vec3 vC; varying float vA; varying float vFlip; uniform float uBright;
         void main(){ vec2 c=gl_PointCoord-0.5; if(vFlip<0.5 && abs(c.y)>0.26) discard; gl_FragColor=vec4(vC*uBright, vA); }`,
-      uniforms: { ...this.lightU, uTime: this.time, uCamX: { value: 0 }, uCamY: { value: 0 }, uPar: { value: par }, uSize: { value: size }, uSpeed: { value: speed }, uWind: { value: 46 }, uBright: { value: bright }, uRain: { value: 0 } },
+      uniforms: { ...this.lightU, uTime: this.time, uCamX: { value: 0 }, uCamY: { value: 0 }, uPar: { value: par }, uSize: { value: size }, uSpeed: { value: speed }, uWind: { value: 14 }, uBright: { value: bright }, uRain: { value: 0 } },
       transparent: true, depthTest: false, depthWrite: false,
     });
     const p = new THREE.Points(g, mat); p.renderOrder = order; p.frustumCulled = false; this.scene.add(p); return p;

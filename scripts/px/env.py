@@ -2,7 +2,7 @@ import numpy as np, math, json, random
 from PIL import Image
 from lib import Cv, hx, mul, lerp, outline, BAYER
 OUT='/workspace/seoul_survival/webgl/public/px/'
-LW=6400; WH=560; FEET=412; LOW=482
+LW=6400; WH=560; FEET=400; LOW=448
 SLOPE0=5520; SLOPE1=5780; WATER_X=6100; GOAL_X=5840
 VIEW_MAXW=720
 def lw(p): return int(math.ceil(((LW-VIEW_MAXW)*p+VIEW_MAXW)/16)*16)
@@ -261,7 +261,7 @@ def wire(cv,a,b,sag=14,col=C('#15161a')):
 LIGHTS_LOCAL=[]
 def street():
     cv=Cv(LW,WH)
-    BASE=368
+    BASE=FEET  # buildings sit on the walkable ground line (true side view)
     # far backdrop wall (dark) so gaps show alleys
     x=0
     plan=[
@@ -287,21 +287,19 @@ def street():
             x+=w
         return x
     x=place(plan,0)
-    # intersection 1450..1750: cross road going back (perspective), traffic light
+    # intersection: flat alley / cross-street opening (true side view — no receding road)
     IX0,IX1=1460,1760
-    cv.dgrad(IX0,150,IX1,BASE,C('#06070a'),C('#0e1016'),steps=4,hg=-20)
-    # receding road
-    cv.poly([(IX0+40,BASE),(IX1-40,BASE),(IX1-110,300),(IX0+110,300)],C('#1c1e23'),-15)
-    for k in range(5):
-        y=BASE-6-k*13; cv.rect(IX0+120-k*0, y, IX1-120+k*0, y+2, C('#3a3c42'),-15)
-    # distant buildings through intersection
-    for i,bx in enumerate(range(IX0+10,IX1-10,48)):
-        h=R.randint(110,190); cv.rect(bx,300-h,bx+44,300,C('#121620'),-18)
-        for wy in range(300-h+8,296,12):
-            for wx in range(bx+4,bx+40,9):
-                if R.random()<0.2: cv.rect(wx,wy,wx+5,wy+6,C('#c8a070'),-18,emi=C('#6a5032'))
-    # bus in back lane (static wreck)
-    bx=IX0+150; by=BASE+6
+    cv.dgrad(IX0,150,IX1,BASE,C('#06070a'),C('#101218'),steps=4,hg=-20)
+    # far facade across the street, flat profile, same ground line
+    for i,bx in enumerate(range(IX0+14,IX1-14,50)):
+        h=R.randint(100,170); cv.rect(bx,BASE-h,bx+46,BASE,C('#121620'),-18)
+        cv.rect(bx,BASE-h,bx+1,BASE,C('#1a1e28'),-18)
+        for wy in range(BASE-h+8,BASE-8,12):
+            for wx in range(bx+4,bx+42,9):
+                if R.random()<0.18: cv.rect(wx,wy,wx+5,wy+6,C('#c8a070'),-18,emi=C('#6a5032'))
+                else: cv.rect(wx,wy,wx+5,wy+6,C('#0c1018'),-18)
+    # bus wreck in profile, sitting on the ground strip
+    bx=IX0+150; by=BASE
     bus=Cv(150,62)
     bus.rect(2,4,148,52,C('#3a9a5a'),3); bus.rect(2,4,148,8,C('#2c7a46'),4)
     bus.rect(2,40,148,52,C('#2a2e34'),2)
@@ -380,96 +378,76 @@ def street():
         if (xx*7+top)%11==0: cv.rect(xx,top+3,xx+1,top+6,C('#2a3040'),-4)
     # bare trees
     for tx in (5450,5600,5730,5900,6030):
-        tree(cv,tx,int(gy(tx))-10,R.randint(70,100))
+        tree(cv,tx,int(gy(tx)),R.randint(70,100))
     sign(cv,5440,FEET-72,72,15,'양재천 산책로',C('#2a5a3a'),C('#ffffff'),0.5)
     cv.rect(5474,FEET-57,5477,FEET-30,C('#6a6e76'),3)
     # 둔치 lamps
     for lx in (5700,5980):
-        g=int(gy(lx))-28
+        g=int(gy(lx))
         cv.rect(lx,g-62,lx+2,g,C('#40444c'),3); cv.rect(lx-3,g-66,lx+5,g-62,C('#2a2d33'),4)
         cv.rect(lx-2,g-62,lx+4,g-61,C('#b8f0c8'),4,emi=C('#b8f0c8'))
         LIGHTS.append(dict(x=lx+1,y=g-60,c=[0.72,0.94,0.8],r=120,i=0.8,cone=1,flick=0.15 if lx==5980 else 0))
     # benches
     for bxx in (5820,5940):
-        g=int(gy(bxx))-26
-        cv.rect(bxx,g,bxx+26,g+3,C('#5a3e2a'),3); cv.rect(bxx,g-8,bxx+26,g-6,C('#5a3e2a'),3)
-        cv.rect(bxx+2,g+3,bxx+4,g+10,C('#2a2d33'),2); cv.rect(bxx+22,g+3,bxx+24,g+10,C('#2a2d33'),2)
+        g=int(gy(bxx))
+        cv.rect(bxx,g-3,bxx+26,g,C('#5a3e2a'),3); cv.rect(bxx,g-11,bxx+26,g-9,C('#5a3e2a'),3)
+        cv.rect(bxx+2,g,bxx+4,g+1,C('#2a2d33'),2); cv.rect(bxx+22,g,bxx+24,g+1,C('#2a2d33'),2)
         snowcap(cv,bxx,bxx+26,g,3,4)
-    # ---------------- sidewalk + road (x<5420)
+    # ---------------- true side-view ground strip (no top-down road / lane markings)
+    CURB=10
+    # sidewalk top (walkable, ~5px) + curb face (~5px) + dark cross-section below
     for xx in range(0,P0):
-        pass
-    cv.rect(0,BASE,P0,BASE+16,C('#5a5c62'),0)
-    for yy in range(BASE,BASE+16,4):
-        off=0 if ((yy-BASE)//4)%2 else 5
-        for xx in range(-off,P0,10):
-            f=0.85+0.25*rng.random(); c=C('#7a5c58') if ((xx//10)%7==3) else C('#6c6e74')
-            cv.rect(xx,yy,xx+9,yy+3,mul(c,f),0.6)
-    # snow on sidewalk: lumpy cover, cleared path near shops
-    for xx in range(0,P0):
-        h=int(2+2*math.sin(xx*0.031)+1.5*math.sin(xx*0.11)+rng.random()*1.2)
-        for k in range(max(0,h)):
-            if rng.random()<0.8: cv.px(xx,BASE+15-k,R.choice(LEAFS[:3]) if rng.random()<0.75 else R.choice(LEAFS),1.5)
-    cv.rect(0,BASE+16,P0,BASE+20,C('#8c8e94'),2.5); snowcap(cv,0,P0,BASE+16,3,3)
-    # road
-    RY0=BASE+20; RY1=448
-    P0=SLOPE0
-    cv.dgrad(0,RY0,P0,RY1,C('#1c1e23'),C('#26282e'),steps=4,hg=0)
-    cv.noise(0,RY0,P0,RY1,[(C('#2c2e34'),0.05),(C('#17181c'),0.05)],rng)
-    # tire tracks (wet, darker, reflective) and slush
-    for ty in (RY0+8,RY0+14,RY0+30,RY0+36):
-        for xx in range(0,P0):
-            if math.sin(xx*0.013+ty)>-0.6: cv.px(xx,ty+int(1.5*math.sin(xx*0.02+ty)),C('#121316'),-0.3)
-    nz=vnoise(P0,RY1-RY0,[(64,6),(16,3),(4,1)])
-    sub=cv.c[RY0:RY1,0:P0]
-    m1=nz>0.66; m2=(nz>0.58)&~m1&((np.add.outer(np.arange(RY1-RY0),np.arange(P0))%2)==0)
-    lr=rng.random(m1.shape)
-    lm=(nz>0.68)&(lr<0.32)
-    pal=np.array([GINKGO[2],GINKGO[3],GINKGO[1],MAPLE[2],BROWN[2]],np.uint8)
-    sub[lm,:3]=pal[(lr[lm]*9).astype(int)%5]
-    cv.hg[RY0:RY1,0:P0][lm]=0.6
-    wet=(nz<0.34); sub[wet,:3]=(sub[wet,:3].astype(np.float32)*0.55+np.array([4,6,10])).clip(0,255).astype(np.uint8)
-    cv.hg[RY0:RY1,0:P0][wet]=-0.4
-    # lane markings: yellow double center line and dashed white
-    for xx in range(0,P0):
-        if not (IX0<xx<IX1):
-            if math.sin(xx*0.05)>-0.85: cv.px(xx,RY0+4,C('#c8a02a'),0.3); cv.px(xx,RY0+6,C('#c8a02a'),0.3)
-            if (xx//24)%2==0 and math.sin(xx*0.02)>-0.5: cv.px(xx,RY0+24,C('#b8bcc4'),0.3)
-    # crosswalk
-    for xx in range(IX0+20,IX1-20,14): cv.rect(xx,RY0,xx+8,RY1,C('#b0b4bc'),0.4)
-    cv.noise(IX0,RY0,IX1,RY1,[(GINKGO[2],0.05),(MAPLE[2],0.02)],rng)
-    # front curb (near side)
-    cv.rect(0,RY1,P0,RY1+4,C('#7c7e84'),2); cv.rect(0,RY1+4,P0,WH,C('#0b0c10'),0)
-    # park ground & slope
-    for xx in range(SLOPE0,SLOPE0+60):  # snowdrift where road meets the park slope
-        hh=int((xx-SLOPE0)*0.9)
-        cv.rect(xx,RY0+max(0,20-hh//2),xx+1,RY1+4,GRASS[2] if (xx+hh)%7 else GRASS[1],1.2)
-    for xx in range(SLOPE0,LW):
+        f=0.88+0.18*((xx*13+7)%5)/5
+        c=C('#7a5c58') if (xx//14)%9==3 else C('#6c6e74')
+        cv.px(xx,BASE,mul(C('#8a8c92'),f),1.6)
+        cv.rect(xx,BASE,xx+1,BASE+5,mul(c,f),1.0)
+        cv.rect(xx,BASE+5,xx+1,BASE+CURB,mul(C('#3e4046'),0.9+0.15*((xx//3)%3)/3),0.3)
+        if rng.random()<0.05: cv.px(xx,BASE+1+int(rng.random()*3),R.choice(LEAFS),1.6)
+    cv.rect(0,BASE+5,P0,BASE+6,C('#8c8e94'),2.2)
+    cv.rect(0,BASE+CURB-1,P0,BASE+CURB,C('#22242a'),0)
+    # dark void / soil cut under the curb (non-walkable)
+    cv.rect(0,BASE+CURB,P0,WH,C('#0b0c10'),0)
+    for k,col in enumerate((C('#16181c'),C('#101216'),C('#0c0d12'))):
+        cv.rect(0,BASE+CURB+k*3,P0,BASE+CURB+(k+1)*3,col,-1)
+    # intersection: slightly different strip tone, no top-down crosswalk
+    for xx in range(IX0,IX1):
+        cv.rect(xx,BASE,xx+1,BASE+5,mul(C('#5a5c62'),0.9+0.1*((xx//2)%3)/3),1.0)
+    # park + slope: thin grass/dirt path, embankment shown as a cross-section
+    PARK0=P0
+    for xx in range(PARK0,LW):
         g=int(gy(xx))
-        cv.rect(xx,g-12,xx+1,WH,C('#0b0c10'),0)
+        cv.rect(xx,g+CURB,xx+1,WH,C('#0b0c10'),0)
         if xx<WATER_X+6:
-            # walkable snow surface band
-            cv.rect(xx,g-12,xx+1,g+8,GRASS[1] if xx<SLOPE1 else BROWN[1],1)
-            cv.px(xx,g-12,GRASS[3],2); cv.px(xx,g-11,GRASS[2],1.8)
-            if rng.random()<0.35: cv.px(xx,g-11-int(rng.random()*2),R.choice(LEAFS),2)
-            if SLOPE0<=xx<SLOPE1 and (xx-SLOPE0)%9<2: cv.rect(xx,g-10,xx+1,g-4,BROWN[2],0.5)
+            col=GRASS[1] if xx<SLOPE1 else BROWN[1]
+            cv.px(xx,g,GRASS[3] if xx<SLOPE1 else BROWN[2],2)
+            cv.rect(xx,g,xx+1,g+5,col,1)
+            cv.rect(xx,g+5,xx+1,g+CURB,C('#3a3228'),0.3)
+            if rng.random()<0.28: cv.px(xx,g+1,R.choice(LEAFS),2)
+            if SLOPE0<=xx<SLOPE1 and (xx-SLOPE0)%9<2:
+                cv.rect(xx,g+2,xx+1,g+5,BROWN[2],0.5)
             if xx>=SLOPE1:
-                cv.rect(xx,g-6,xx+1,g-2,C('#5a5450'),0.4)  # gravel path line
-        # stone embankment edge at water
-    for yy in range(LOW-14,WH):
-        for xx in range(WATER_X-12,WATER_X+4):
-            if (xx+yy*3)%7<5: cv.px(xx,yy,mul(C('#5a5e66'),0.7+0.3*((xx*13+yy*7)%5)/5),1+0.4*((xx+yy)%3))
-    snowcap(cv,WATER_X-12,WATER_X+4,LOW-14,3,3)
-    # rail along park edge top
-    for k in range(P0,SLOPE0+20,12): cv.rect(k,FEET-34,k+2,FEET-12,C('#4a4e56'),4)
-    cv.rect(P0,FEET-34,SLOPE0+20,FEET-32,C('#5a5e66'),4); snowcap(cv,P0,SLOPE0+20,FEET-34,2,5)
+                cv.rect(xx,g+1,xx+1,g+3,C('#5a5450'),0.4)
+            # soil layers on the descending cut
+            if xx>=SLOPE0:
+                cut=int(8+((xx-SLOPE0)/(LW-SLOPE0))*28)
+                cv.rect(xx,g+CURB,xx+1,min(WH,g+CURB+cut),BROWN[0],-1)
+                if (xx+g)%11==0: cv.px(xx,g+CURB+cut//2,C('#2a241c'),-1)
+    # stone embankment at the water surface line (profile edge, not a top-down apron)
+    for xx in range(WATER_X-10,WATER_X+3):
+        for k in range(0,18):
+            if (xx+k*3)%7<5: cv.px(xx,LOW+k,mul(C('#5a5e66'),0.7+0.3*((xx*13+k*7)%5)/5),1+0.3*(k%3))
+    snowcap(cv,WATER_X-10,WATER_X+3,LOW,2,3)
+    # low rail along the park approach, posts sitting on the path
+    for k in range(PARK0,SLOPE0+20,12): cv.rect(k,FEET-22,k+2,FEET,C('#4a4e56'),4)
+    cv.rect(PARK0,FEET-22,SLOPE0+20,FEET-20,C('#5a5e66'),4); snowcap(cv,PARK0,SLOPE0+20,FEET-22,2,5)
     # streetlamps
     for lx in list(range(90,IX0-40,300))+list(range(IX1+60,4300,300))+[4420,4740,5060,5340]:
-        streetlamp(cv,lx,BASE+12,'sodium' if (lx//300)%3==1 else 'led')
+        streetlamp(cv,lx,BASE,'sodium' if (lx//300)%3==1 else 'led')
     # 은행나무 가로수 (street ginkgo trees on sidewalk edge)
     for tx in list(range(200,IX0-60,330))+list(range(IX1+150,4300,330)):
         if any(abs(tx-l)<30 for l in range(90,5400,300)): tx+=40
-        tree(cv,tx,BASE+14,R.randint(110,150))
-        cv.rect(tx-6,BASE+12,tx+7,BASE+16,C('#3a3026'),1)
+        tree(cv,tx,BASE,R.randint(110,150))
+        cv.rect(tx-6,BASE-2,tx+7,BASE+3,C('#3a3026'),1)
     # leaf piles on the walking lane (gameplay: louder steps)
     for (a,b) in [(560,690),(2160,2290),(3040,3150),(4180,4330),(4790,4900)]:
         LEAF_PILES.append([a,b])
@@ -477,11 +455,11 @@ def street():
         for xx in range(a,b):
             t=1-abs(xx-mid)/half; hgt=int(2+7*t*t+rng.random()*2)
             for k in range(hgt):
-                cv.px(xx,FEET+2-k,R.choice(LEAFS[:3]) if rng.random()<0.7 else R.choice(LEAFS),1.5+k*0.4)
+                cv.px(xx,FEET-k,R.choice(LEAFS[:3]) if rng.random()<0.7 else R.choice(LEAFS),1.5+k*0.4)
     # utility poles + wires
     tops=[]
     for px_ in range(250,5400,520):
-        tops.append(utilpole(cv,px_,BASE+8,150))
+        tops.append(utilpole(cv,px_,BASE,150))
     for a,b in zip(tops,tops[1:]):
         wire(cv,a,b,16); wire(cv,(a[0],a[1]+4),(b[0],b[1]+4),20,C('#1c1d22')); wire(cv,(a[0]-8,a[1]),(b[0]-8,b[1]),12)
     # graffiti / posters
@@ -569,27 +547,27 @@ def skyline(W,base,hmin,hmax,col,wincol,density,lit,p,seed,mountain=False,towers
 
 def far():
     W=lw(0.15); cv=Cv(W,WH)
-    m=skyline(W,330,40,110,C('#121524'),[C('#c8a070'),C('#8090b0')],0.10,0.7,0.15,11,mountain=True)
+    m=skyline(W,362,40,110,C('#121524'),[C('#c8a070'),C('#8090b0')],0.10,0.7,0.15,11,mountain=True)
     cv.blit(m,0,0)
-    # haze band
-    cv.ditherfill(0,300,W,340,C('#2a2638'),0.35)
+    # haze band (depth via haze only — flat profile, no ground plane)
+    cv.ditherfill(0,332,W,372,C('#2a2638'),0.35)
     return cv
 def mid2():
     W=lw(0.35); cv=Cv(W,WH)
-    m=skyline(W,350,70,170,C('#171b28'),[C('#d8a868'),C('#90a8d0'),C('#e8c890')],0.14,0.85,0.35,22,towers=True)
+    m=skyline(W,382,70,170,C('#171b28'),[C('#d8a868'),C('#90a8d0'),C('#e8c890')],0.14,0.85,0.35,22,towers=True)
     cv.blit(m,0,0)
     # 도곡동 towers near the end (across the stream)
     for i,tx in enumerate(range(W-420,W-60,90)):
-        h=230+i*18; cv.rect(tx,350-h,tx+46,350,C('#1a1f2e'),0)
-        cv.rect(tx+20,350-h-20,tx+22,350-h,C('#3a3f4a'),0); cv.px(tx+21,350-h-21,C('#ff3020'),0,emi=C('#ff3020'))
-        for wy in range(350-h+6,346,8):
+        h=230+i*18; cv.rect(tx,382-h,tx+46,382,C('#1a1f2e'),0)
+        cv.rect(tx+20,382-h-20,tx+22,382-h,C('#3a3f4a'),0); cv.px(tx+21,382-h-21,C('#ff3020'),0,emi=C('#ff3020'))
+        for wy in range(382-h+6,378,8):
             for wx in range(tx+4,tx+44,6):
                 if R.random()<0.22: cv.rect(wx,wy,wx+3,wy+4,C('#cfdcf0'),0,emi=C('#8090b8'))
-    cv.ditherfill(0,320,W,360,C('#22243a'),0.4)
+    cv.ditherfill(0,352,W,392,C('#22243a'),0.4)
     return cv
 def mid1():
     W=lw(0.6); cv=Cv(W,WH)
-    x=0; base=366
+    x=0; base=398
     while x<3240:
         w=R.randint(90,150); fl=R.randint(4,8)
         if R.random()<0.5:
@@ -614,44 +592,49 @@ def mid1():
 
 def fg():
     W=lw(1.25); cv=Cv(W,WH)
-    # snowbanks along bottom, poles, guard rails; mostly dark silhouettes with snow tops
+    # dark foreground cross-section just under the ground line (true side view)
+    G0=FEET+8
     for xx in range(W):
-        h=int(16+10*math.sin(xx*0.011)+6*math.sin(xx*0.037)+3*math.sin(xx*0.13))
-        if xx>6900: continue
-        top=(WH-90-h) if xx<6700 else (WH-90-h+int((xx-6700)*0.6))
+        h=int(6+8*math.sin(xx*0.011)+4*math.sin(xx*0.037)+2*math.sin(xx*0.13))
+        top=G0+int(h)
+        # drop with the stream bank near the end
+        if xx>int(W*0.86):
+            top=min(WH-8, top+int((xx-W*0.86)*0.35))
         cv.rect(xx,top,xx+1,WH,C('#0c0e14'),0)
-        cv.px(xx,top,lerp(C('#0c0e14'),R.choice(LEAFS),0.5),1); cv.px(xx,top+1,lerp(C('#0c0e14'),R.choice(LEAFS),0.25),0.5)
+        cv.px(xx,top,lerp(C('#0c0e14'),R.choice(LEAFS),0.45),1)
+        cv.px(xx,top+1,lerp(C('#0c0e14'),R.choice(LEAFS),0.2),0.5)
     x=200
-    while x<6500:
+    while x<int(W*0.86):
         k=R.random()
-        if k<0.3:
-            # guardrail segment
-            for px_ in range(x,x+120,24): cv.rect(px_,WH-100,px_+4,WH,C('#14161c'),2)
-            cv.rect(x,WH-98,x+124,WH-90,C('#1c1f26'),3); cv.rect(x,WH-98,x+124,WH-97,C('#3a3e48'),3.5)
-            snowcap(cv,x,x+124,WH-98,3,4)
-            x+=R.randint(260,420)
+        if k<0.32:
+            # guardrail / planter lip in profile, low against the curb
+            for px_ in range(x,x+110,22): cv.rect(px_,G0-2,px_+3,G0+36,C('#14161c'),2)
+            cv.rect(x,G0-4,x+114,G0-1,C('#1c1f26'),3); cv.rect(x,G0-4,x+114,G0-3,C('#3a3e48'),3.5)
+            snowcap(cv,x,x+114,G0-4,2,4)
+            x+=R.randint(240,400)
         elif k<0.55:
-            # pole silhouette
-            cv.rect(x,0,x+9,WH,C('#0e1016'),3); cv.rect(x,0,x+1,WH,C('#262a34'),3)
-            x+=R.randint(300,500)
-        elif k<0.75:
-            # dead shrub
-            for j in range(14):
-                a=R.uniform(-1.1,1.1); L=R.randint(10,26)
-                cv.line(x,WH-66,x+L*math.sin(a),WH-66-L*math.cos(a),C('#0e1014'),2)
-            x+=R.randint(200,360)
+            # close pole silhouette (cropped by bottom of frame)
+            cv.rect(x,G0-180,x+8,WH,C('#0e1016'),3); cv.rect(x,G0-180,x+1,WH,C('#262a34'),3)
+            x+=R.randint(280,480)
+        elif k<0.78:
+            # shrub / planter
+            for j in range(12):
+                a=R.uniform(-1.1,1.1); L=R.randint(8,22)
+                cv.line(x,G0+8,x+L*math.sin(a),G0+8-L*math.cos(a),C('#0e1014'),2)
+            x+=R.randint(180,340)
         else:
-            # parked car silhouette front
-            cv.ellipse(x+40,WH-64,46,18,C('#0f1117'),2,dome=4); cv.rect(x-6,WH-70,x+86,WH,C('#0f1117'),2)
-            snowcap(cv,x+4,x+76,WH-82,4,5)
-            x+=R.randint(320,500)
-    # dry reeds (갈대) at the stream edge, frozen
-    for rx in range(6880,W,3):
+            # parked car, near-side profile silhouette (only roof/body poking above the curb band)
+            cv.rect(x,G0-18,x+90,WH,C('#0f1117'),2)
+            cv.ellipse(x+22,G0-4,8,8,C('#0a0c10'),2); cv.ellipse(x+68,G0-4,8,8,C('#0a0c10'),2)
+            snowcap(cv,x+6,x+84,G0-18,3,4)
+            x+=R.randint(300,480)
+    # dry reeds (갈대) at the stream edge, in profile
+    for rx in range(int(W*0.86),W,3):
         if R.random()<0.55:
-            hgt=R.randint(18,46); lean=R.uniform(-0.25,0.35); base_=WH-R.randint(0,10)
+            hgt=R.randint(18,46); lean=R.uniform(-0.25,0.35); base_=G0+20+R.randint(0,16)
             for k in range(hgt):
                 cv.px(rx+int(lean*k*0.6),base_-k,C('#121014') if k<hgt-5 else C('#3a3026'),2)
-            cv.px(rx+int(lean*hgt*0.6),base_-hgt,C('#b8a888'),2.5); cv.px(rx+int(lean*hgt*0.6),base_-hgt+1,C('#8a7a60'),2.5)
+            cv.px(rx+int(lean*hgt*0.6),base_-hgt,C('#b8a888'),2.5)
     return cv
 
 # ------------------------------------------------------------------ props
@@ -783,7 +766,7 @@ def save_sprite(cv,name):
     return dict(w=cv.w,h=cv.h)
 
 if __name__=='__main__':
-    meta={'world':dict(w=LW,h=WH,feet=FEET,low=LOW,slope0=SLOPE0,slope1=SLOPE1,water=WATER_X,goal=GOAL_X,ct0=150),'layers':[],'sprites':{}}
+    meta={'world':dict(w=LW,h=WH,feet=FEET,low=LOW,slope0=SLOPE0,slope1=SLOPE1,water=WATER_X,goal=GOAL_X,ct0=108),'layers':[],'sprites':{}}
     layers=[('sky',0.03,sky),('far',0.15,far),('mid2',0.35,mid2),('mid1',0.6,mid1),('street',1.0,street),('fg',1.25,fg)]
     for name,p,fn in layers:
         cv=fn()

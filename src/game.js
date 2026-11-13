@@ -4,8 +4,15 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export class Game {
   constructor(world, sprites, audio, log, piles = []) {
-    this.piles = piles; this.w = world; this.sp = sprites; this.audio = audio; this.log = log;
-    this.reset();
+    this.piles = piles; this.streetWorld = world; this.w = world; this.sp = sprites; this.audio = audio; this.log = log;
+    this.officeMeta = null; this.scene = 'street';
+  }
+  attachOffice(meta) { this.officeMeta = meta; }
+  maxX() { return (this.w.xmax ?? this.w.water) - 8; }
+  enter(scene, keep = null) {
+    this.scene = scene;
+    if (scene === 'office') this.resetOffice();
+    else this.resetStreet(keep);
   }
   ground(x) {
     const w = this.w;
@@ -13,23 +20,47 @@ export class Game {
     if (x < w.slope1) { const t = (x - w.slope0) / (w.slope1 - w.slope0); return w.feet + (w.low - w.feet) * (0.5 - 0.5 * Math.cos(t * Math.PI)); }
     return w.low;
   }
-  reset() {
-    const w = this.w;
-    this.t = 0; this.over = null; this.stats = { bites: 0, shoves: 0, splashes: 0, items: 0 };
+  reset() { this.enter('office'); }
+  resetOffice() {
+    const m = this.officeMeta; const w = m.world; this.w = w;
+    this.t = 0; this.over = null; this.overPending = null; this.stats = { bites: 0, shoves: 0, splashes: 0, items: 0 };
+    this.leaveOffice = false;
+    this.p = {
+      x: m.start.x, y: w.feet, vx: 0, vy: 0, face: m.start.face || 1, onGround: true, crouch: false, run: false,
+      blood: 100, stamina: 100, temp: 36.6, bleed: 0, exposed: false, water: 0, bandage: 0,
+      torch: false, anim: 'idle', animT: 0, actT: 0, act: null, hurtT: 0, landT: 0, noise: 0, noiseShow: 0, lit: 0, dead: false, coyote: 0, jumpBuf: 0, invT: 0,
+    };
+    this.props = []; this.barrels = [];
+    this.solids = (m.solids || []).map(b => ({ ...b }));
+    this.items = (m.items || []).map(it => ({ ...it, taken: false, y: it.y ?? w.feet }));
+    this.enemies = (m.enemies || []).map(([k, x], i) => ({
+      id: i, k, x, y: w.feet, vx: 0, vy: 0, home: x, face: -1, para: k === 'inf_d',
+      state: 'idle', st: 0.5, anim: 'idle', animT: 0, cd: 0, lungeCd: 0, blocked: 0, seen: false,
+      wanderTo: x, speedMul: 0.85, bang: 0,
+    }));
+    this.splashes = []; this.shake = 0; this.flash = 0; this.prompt = null; this.chased = 0;
+    this.rain = { on: false, t: 0, next: 9999, scripted: true, dur: 0 };
+    this.pileLogged = false; this.exits = m.exits || [];
+    this.tut = { move: false, torch: false, run: false, jump: false, water: false, splash: false };
+  }
+  resetStreet(keep = null) {
+    const w = this.streetWorld; this.w = w;
+    this.t = 0; this.over = null; this.overPending = null; this.leaveOffice = false;
+    if (!keep) this.stats = { bites: 0, shoves: 0, splashes: 0, items: 0 };
     this.p = {
       x: 70, y: w.feet, vx: 0, vy: 0, face: 1, onGround: true, crouch: false, run: false,
-      blood: 100, stamina: 100, temp: 36.6, bleed: 0, exposed: false, water: 1, bandage: 0,
-      torch: true, anim: 'idle', animT: 0, actT: 0, act: null, hurtT: 0, landT: 0, noise: 0, noiseShow: 0, lit: 0, dead: false, coyote: 0, jumpBuf: 0, invT: 0,
+      blood: keep ? keep.blood : 100, stamina: 100, temp: 36.6, bleed: keep ? keep.bleed : 0, exposed: keep ? keep.exposed : false,
+      water: keep ? keep.water : 1, bandage: keep ? keep.bandage : 0,
+      torch: keep ? keep.torch : true, anim: 'idle', animT: 0, actT: 0, act: null, hurtT: 0, landT: 0, noise: 0, noiseShow: 0, lit: 0, dead: false, coyote: 0, jumpBuf: 0, invT: 0,
     };
     // props: [key, x]
     const P = [['car_white', 760], ['barricade', 1640], ['car_dark', 2050], ['car_taxi', 2950], ['ambulance', 3700], ['car_red', 4560]];
     this.props = P.map(([k, x]) => {
-      const s = this.sp[k]; const top = w.feet - s.h + 1;
-      const b = s.solid;
+      const s = this.sp[k]; const b = s.solid; const top = w.feet - b[3];
       return { k, x, y: top, w: s.w, h: s.h, solid: { x0: x + b[0], y0: top + b[1], x1: x + b[2], y1: top + b[3] } };
     });
     this.solids = this.props.map(p => p.solid);
-    this.barrels = [{ x: 3400 }, { x: 5010 }].map(b => ({ ...b, y: w.feet - 44 + 1 }));
+    this.barrels = [{ x: 3400 }, { x: 5010 }].map(b => ({ ...b, y: w.feet - 44 }));
     const I = [['water', 980], ['note', 1320, 0], ['water', 1950], ['bandage', 2700], ['radio', 3300, 1], ['water', 3480], ['bandage', 4400], ['note', 5250, 2]];
     this.items = I.map(([k, x, n]) => ({ k, x, y: this.ground(x), taken: false, note: n }));
     const E = [['inf_b', 1180], ['inf_a', 2600], ['inf_d', 2420], ['inf_c', 2880], ['inf_b', 3600], ['inf_a', 3920], ['inf_d', 4140], ['inf_c', 4700], ['inf_a', 4930], ['inf_b', 5160], ['inf_c', 5330]];
@@ -106,7 +137,7 @@ export class Game {
     p.vy += 980 * dt; if (p.vy > 600) p.vy = 600;
     const hh = p.crouch ? 28 : 44, hw = 6;
     this.collideX(p, hw, hh, p.vx * dt);
-    p.x = clamp(p.x, 10, w.water - 8);
+    p.x = clamp(p.x, 10, this.maxX());
     const wasAir = !p.onGround; const vyBefore = p.vy;
     const landed = this.collideY(p, hw, hh, p.vy * dt);
     if (landed) { if (wasAir && vyBefore > 150) { p.landT = 0.12; this.emitNoise(5 * M * Math.min(1.5, vyBefore / 300)); this.audio.step(1.4); } p.vy = 0; p.onGround = true; }
@@ -115,9 +146,9 @@ export class Game {
     if (p.run) p.stamina -= 17 * dt;
     else p.stamina += (p.crouch ? 16 : 13) * dt * (Math.abs(p.vx) < 5 ? 1.4 : 1);
     p.stamina = clamp(p.stamina, 0, 100);
-    // weather: autumn showers. Rain = infected falter (safe window)
+    // weather: autumn showers. Rain = infected falter (safe window). Street only.
     const rn = this.rain;
-    if (!rn.scripted && p.x > 2250) { rn.scripted = true; this.startRain(13); }
+    if (this.scene === 'street' && !rn.scripted && p.x > 2250) { rn.scripted = true; this.startRain(13); }
     if (rn.on) { rn.t -= dt; if (rn.t <= 0) { rn.on = false; rn.next = 45 + Math.random() * 30; this.log('비 그침 — 감염자들이 다시 움직인다', 'alert'); } }
     else if (rn.scripted) { rn.next -= dt; if (rn.next <= 0) this.startRain(10 + Math.random() * 4); }
     // bleeding
@@ -163,7 +194,10 @@ export class Game {
     this.shake = Math.max(0, this.shake - dt * 6); this.flash = Math.max(0, this.flash - dt * 3);
     // end conditions
     if (p.blood <= 25 && !p.dead) { p.dead = true; p.anim = 'dead'; p.animT = 0; this.audio.death(); setTimeout(() => { this.over = 'dead'; }, 1600); this.overPending = 'dead'; }
-    if (!p.dead && p.x >= w.goal && !this.overPending) { this.overPending = 'win'; this.audio.win(); setTimeout(() => { this.over = 'win'; }, 900); }
+    if (this.scene === 'office' && !p.dead && !this.leaveOffice) {
+      for (const ex of this.exits) if (p.x > ex.x && p.x < ex.x + ex.w && p.onGround) { this.leaveOffice = true; this.exitKind = ex.k; break; }
+    }
+    if (this.scene === 'street' && !p.dead && p.x >= w.goal && !this.overPending) { this.overPending = 'win'; this.audio.win(); setTimeout(() => { this.over = 'win'; }, 900); }
   }
   startRain(d) { const r = this.rain; r.on = true; r.t = d; r.dur = d; this.audio.rain?.(d); this.log('비 — 감염자들이 빗속에서 움츠러든다. 지금 지나가라', 'safe'); }
   emitNoise(r) { this.p.noise = Math.max(this.p.noise, r); }
@@ -302,5 +336,5 @@ export class Game {
 export const NOTES = [
   '[메모 · 3층 현관] 김씨네 아들, 물린 지 이틀. 열, 침. 물컵을 보고 목이 조여 경련. 문은 밖에서 잠갔음.',
   '[무전 · 147.2MHz] "…물가에는 안 온다. 양재천 둔치로 내려가. 한강만 가면 산다…" (반복)',
-  '[전단] 양재천 산책로 임시 대피 — 감염자는 열린 물을 피함. 결빙 구간 주의. 반포·잠원 집결.',
+  '[전단] 양재천 산책로 임시 대피 — 감염자는 열린 물을 피함. 반포·잠원 집결.',
 ];

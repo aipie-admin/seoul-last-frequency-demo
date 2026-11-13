@@ -14,21 +14,43 @@
 <section id="title" class="screen">
   <div class="t-panel">
     <header class="t-meta grid1">
-      <div><samp>UNIT / 양재-01</samp><samp>REV 6.0 ®</samp></div>
+      <div><samp>UNIT / 양재-01</samp><samp>REV 7.0 ®</samp></div>
       <div><samp>37.4842°N 127.0347°E</samp><samp>SEC 01 / 05</samp></div>
     </header>
     <h1 class="macro">서울:<br/>마지막<br/>주파수</h1>
     <div class="stripe"></div>
-    <p class="t-lede">10월, 양재동. 정전 사흘째. 무전은 한 문장만 반복한다 — <b>물가로 가라.</b><br/>인간에게 옮는 광견병. 감염자는 열린 물에 다가오지 못한다.</p>
+    <p class="t-lede">늦가을, 양재동. 서초 하천관리센터 2층에서 뉴스가 끊긴다 — <b>사람에게 옮는 광견병.</b><br/>감염자는 소리에 반응하고, 물을 두려워한다. 목표는 양재천 둔치.</p>
     <nav class="t-menu">
-      <button id="btnStart" class="row hot"><kbd>01</kbd><span>출발 — 양재동 → 양재천</span><i>&gt;&gt;&gt;</i></button>
+      <button id="btnStart" class="row hot"><kbd>01</kbd><span>출발 — 하천관리센터 2층</span><i>&gt;&gt;&gt;</i></button>
       <button id="btnQuality" class="row"><kbd>02</kbd><span>그래픽 품질</span><output id="qLabel">고</output></button>
       <button id="btnHelp" class="row"><kbd>03</kbd><span>조작법</span><i>///</i></button>
     </nav>
     <footer class="t-foot"><div class="barcode"></div><samp>VERTICAL SLICE · 0.1 · 모든 도트 코드 생성 · WEBP</samp></footer>
   </div>
   <div class="t-frame"><span class="cross tl">+</span><span class="cross tr">+</span><span class="cross bl">+</span><span class="cross br">+</span>
-    <samp class="t-cap">[ LIVE FEED / 양재동 상가로 18:52 ]</samp></div>
+    <samp class="t-cap">[ LIVE FEED / 서초 하천관리센터 2층  17:12 ]</samp></div>
+</section>
+
+
+<!-- NEWS / OPENING -->
+<section id="news" class="screen hidden">
+  <div class="panel news-panel">
+    <header class="t-meta grid1">
+      <div><samp>서울 종합뉴스</samp><samp class="hot-s">속보</samp></div>
+      <div><samp>11월 · 17:12</samp><samp>양재 · 서초</samp></div>
+    </header>
+    <h2 class="macro-s">사람 사이<br/>광견병 확산</h2>
+    <div class="stripe"></div>
+    <p class="t-lede">추정 병원체는 광견병. 물렸거나 할퀴인 뒤에는 <b>증상이 오기 전</b>에만 노출 후 예방접종(PEP)이 듣는다.</p>
+    <dl class="keys news-rules">
+      <dt>01</dt><dd>물렸거나 할퀴였으면 비누와 흐르는 물로 15분 씻고, 즉시 노출 후 예방접종(PEP)을 받을 것.</dd>
+      <dt>02</dt><dd>감염자는 소리와 빛에 반응한다. 문을 잠그고 불필요한 소음을 내지 말 것.</dd>
+      <dt>03</dt><dd>감염자는 물을 두려워한다. 고인 물·개울을 사이에 두면 다가오지 못한다.</dd>
+      <dt>04</dt><dd>증상 있는 사람·동물에게 접근하지 말 것. 밤 외출을 자제할 것.</dd>
+    </dl>
+    <button id="btnNewsSkip" class="row hot"><kbd>ENTER</kbd><span>계속 — 사무실</span><i>&gt;&gt;&gt;</i></button>
+    <p class="note">건너뛰기 · ENTER / SPACE / 클릭</p>
+  </div>
 </section>
 
 <!-- HUD -->
@@ -54,6 +76,7 @@
     <div class="h-row"><label>노출</label><div class="bar seg" id="bLit"><i></i></div><output id="vLit">어둠</output></div>
   </div>
   <div id="prompt" class="hidden"><kbd>E</kbd><span id="promptTxt">줍기</span></div>
+  <div id="tutor" class="hidden"><kbd id="tutorKey">A / D</kbd><span id="tutorTxt">이동</span></div>
   <div class="h-log" id="log"></div>
   <div id="alarm" class="hidden">[ 추격 ]</div>
 </section>
@@ -89,7 +112,7 @@
     <p id="eCause" class="t-lede"></p>
     <dl class="stats" id="eStats"></dl>
     <div class="t-menu">
-      <button id="btnRetry" class="row hot"><kbd>01</kbd><span>다시 — 양재동</span><i>&gt;&gt;&gt;</i></button>
+      <button id="btnRetry" class="row hot"><kbd>01</kbd><span>다시 — 사무실</span><i>&gt;&gt;&gt;</i></button>
       <button id="btnTitle" class="row"><kbd>02</kbd><span>타이틀</span><i>///</i></button>
     </div>
   </div>
@@ -97,6 +120,7 @@
 
 <section id="loading" class="screen"><div class="panel"><samp>[ 수신 중 ]</samp><h2 class="macro-s" id="loadPct">00%</h2><div class="stripe"></div><samp>양재동 · 147.2MHz</samp></div></section>
 
+<div id="fade"></div>
 <div id="touch" class="hidden">
   <div class="tl"><button data-t="left">◀</button><button data-t="right">▶</button><button data-t="crouch">웅크</button></div>
   <div class="tr"><button data-t="run">달리기</button><button data-t="shove">밀치기</button><button data-t="splash">물</button><button data-t="interact">E</button><button data-t="torch">빛</button><button data-t="bandage">붕대</button><button data-t="jump" class="big">점프</button><button data-t="pause">II</button></div>
