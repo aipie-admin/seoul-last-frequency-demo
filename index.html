@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>서울: 마지막 주파수 — SEC 01 양재동</title>
 <link rel="preload" href="/seoul-last-frequency-demo/fonts/Galmuri11.woff2" as="font" type="font/woff2" crossorigin />
-  <script type="module" crossorigin src="/seoul-last-frequency-demo/assets/index-wafnG1fI.js"></script>
-  <link rel="stylesheet" crossorigin href="/seoul-last-frequency-demo/assets/index-CoWTU2OP.css">
+  <script type="module" crossorigin src="/seoul-last-frequency-demo/assets/index-CUU0WYAV.js"></script>
+  <link rel="stylesheet" crossorigin href="/seoul-last-frequency-demo/assets/index-DFneuiKJ.css">
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -21,16 +21,16 @@
     </header>
     <h1 class="macro">서울:<br/>마지막<br/>주파수</h1>
     <div class="stripe"></div>
-    <p class="t-lede">늦가을, 양재동. 서초 하천관리센터 2층에서 뉴스가 끊긴다 — <b>사람에게 옮는 광견병.</b><br/>감염자는 소리에 반응하고, 물을 두려워한다. 목표는 양재천 둔치.</p>
+    <p class="t-lede">늦가을, 양재동. 볼더스튜디오 2층에서 뉴스가 끊긴다 — <b>사람에게 옮는 광견병.</b><br/>감염자는 소리에 반응하고, 물을 두려워한다. 목표는 양재천 둔치.</p>
     <nav class="t-menu">
-      <button id="btnStart" class="row hot"><kbd>01</kbd><span>출발 — 하천관리센터 2층</span><i>&gt;&gt;&gt;</i></button>
+      <button id="btnStart" class="row hot"><kbd>01</kbd><span>출발 — 볼더스튜디오 2층</span><i>&gt;&gt;&gt;</i></button>
       <button id="btnQuality" class="row"><kbd>02</kbd><span>그래픽 품질</span><output id="qLabel">고</output></button>
       <button id="btnHelp" class="row"><kbd>03</kbd><span>조작법</span><i>///</i></button>
     </nav>
     <footer class="t-foot"><div class="barcode"></div><samp>VERTICAL SLICE · 0.1 · 모든 도트 코드 생성 · WEBP</samp></footer>
   </div>
   <div class="t-frame"><span class="cross tl">+</span><span class="cross tr">+</span><span class="cross bl">+</span><span class="cross br">+</span>
-    <samp class="t-cap">[ LIVE FEED / 서초 하천관리센터 2층  17:12 ]</samp></div>
+    <samp class="t-cap">[ LIVE FEED / 볼더스튜디오 2층  17:12 ]</samp></div>
 </section>
 
 
@@ -58,14 +58,14 @@
 <!-- HUD -->
 <section id="hud" class="hidden">
   <div class="h-vitals grid1">
-    <div class="h-row"><label>혈액량</label><div class="bar" id="bBlood"><i></i></div><output id="vBlood">100</output></div>
+    <div class="h-row"><label>배터리</label><div class="bar" id="bBatt"><i></i></div><output id="vBatt">100%</output></div>
     <div class="h-row"><label>체력</label><div class="bar" id="bStam"><i></i></div><output id="vStam">100</output></div>
     <div class="h-row"><label id="lTemp">날씨 · 맑음</label><div class="bar" id="bTemp"><i></i></div><output id="vTemp">—</output></div>
-    <div class="h-row"><label>출혈</label><samp id="vBleed">없음</samp><samp class="r" id="vExpo">광견병 노출 · 없음</samp></div>
+    <div class="h-row"><samp class="r" id="vExpo">광견병 노출 · 없음</samp></div>
     <div class="h-inv">
       <div><kbd>Q</kbd><span>생수</span><output id="vWater">1</output></div>
       <div><kbd>R</kbd><span>붕대</span><output id="vBand">0</output></div>
-      <div><kbd>F</kbd><span>손전등</span><output id="vTorch">ON</output></div>
+      <div><kbd>F</kbd><span>휴대폰 플래시</span><output id="vTorch">ON</output></div>
     </div>
   </div>
   <div class="h-route grid1">
@@ -94,10 +94,10 @@
       <dt>S · C · CTRL</dt><dd>웅크리기 — 소음·시야 감소, 바리케이드 밑 통과</dd>
       <dt>SPACE · W</dt><dd>점프 — 차량 위로</dd>
       <dt>E</dt><dd>줍기 · 읽기</dd>
-      <dt>Q</dt><dd>물 뿌리기 — 감염자 3초 경련(공수병)</dd>
+      <dt>Q</dt><dd>물 뿌리기 — 맞으면 전속 도주, 벽에 부딪히면 사망</dd>
       <dt>J · 클릭</dt><dd>밀치기 — 체력 20</dd>
       <dt>R</dt><dd>붕대 — 출혈 정지</dd>
-      <dt>F</dt><dd>손전등 — 시야↑ 눈에 띔↑</dd>
+      <dt>F</dt><dd>휴대폰 플래시 — 시야↑ 눈에 띔↑ · 배터리는 천천히 닳음</dd>
       <dt>ESC · P</dt><dd>일시정지</dd>
     </dl>
     <p class="note">목표: 양재천 둔치(물가)까지 이동. 감염자는 물에서 10M 안으로 들어오지 못한다. 비가 오면 감염자가 움츠러든다 — 그때 지나가라. 낙엽 더미는 발소리를 키운다. 혈액량이 25 아래로 떨어지면 사망.</p>
