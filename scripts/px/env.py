@@ -8,6 +8,12 @@ VIEW_MAXW=720
 def lw(p): return int(math.ceil(((LW-VIEW_MAXW)*p+VIEW_MAXW)/16)*16)
 C=lambda s:hx(s)
 SNOW=[C('#7f8ea6'),C('#a7b4c8'),C('#c9d3e2'),C('#e8eef6')]
+GINKGO=[C('#6a4a08'),C('#a87a10'),C('#d8a818'),C('#f4cc3a')]
+MAPLE=[C('#4a1008'),C('#8a1e10'),C('#c0361c'),C('#e2602a')]
+BROWN=[C('#2a1c12'),C('#4a3220'),C('#6e4c2e'),C('#8e6a40')]
+LEAFS=[GINKGO[2],GINKGO[3],GINKGO[1],MAPLE[2],MAPLE[1],BROWN[2],BROWN[3],MAPLE[3]]
+GRASS=[C('#1e2014'),C('#34361e'),C('#4e4a26'),C('#6a6030')]
+LEAF_PILES=[]
 rng=np.random.default_rng(2026); R=random.Random(2026)
 def vnoise(w,h,octs):
     acc=np.zeros((h,w),np.float32); tot=0
@@ -19,7 +25,12 @@ def vnoise(w,h,octs):
 LIGHTS=[]; PROPS=[]; SOLIDS=[]; ITEMS=[]; ENEMIES=[]; ANIMS=[]; ZONES=[]
 
 def snowcap(cv,x0,x1,y,maxh=3,hg=2.0):
-    x0=int(x0); x1=int(x1); h=0.0
+    x0=int(x0); x1=int(x1)
+    for x in range(x0,x1):
+        if R.random()<0.18: cv.px(x,y-1,R.choice(LEAFS),hg+0.5)
+        if R.random()<0.05: cv.px(x,y-2,R.choice(LEAFS),hg+0.8)
+    return
+    h=0.0
     for x in range(x0,x1):
         h=max(1,min(maxh,h+R.choice([-1,0,0,1]))) if x>x0 else R.randint(1,maxh)
         hh=int(h) if x not in (x0,x1-1) else 1
@@ -364,8 +375,8 @@ def street():
         g=int(gy(xx))
         bh=int(10+5*math.sin(xx*0.02)+3*math.sin(xx*0.07))
         top=min(g-12,FEET-6)-bh if xx<SLOPE1 else g-12-bh
-        cv.rect(xx,top,xx+1,g,C('#3a4256'),-4)
-        cv.px(xx,top,SNOW[1],-3); cv.px(xx,top+1,lerp(C('#3a4256'),SNOW[0],0.5),-3)
+        cv.rect(xx,top,xx+1,g,GRASS[1],-4)
+        cv.px(xx,top,GRASS[3],-3); cv.px(xx,top+1,GRASS[2],-3)
         if (xx*7+top)%11==0: cv.rect(xx,top+3,xx+1,top+6,C('#2a3040'),-4)
     # bare trees
     for tx in (5450,5600,5730,5900,6030):
@@ -395,9 +406,9 @@ def street():
             cv.rect(xx,yy,xx+9,yy+3,mul(c,f),0.6)
     # snow on sidewalk: lumpy cover, cleared path near shops
     for xx in range(0,P0):
-        h=int(4+3*math.sin(xx*0.031)+2*math.sin(xx*0.11)+rng.random()*1.2)
-        cv.rect(xx,BASE+16-h,xx+1,BASE+16,SNOW[2],1.5)
-        cv.px(xx,BASE+16-h,SNOW[3],2)
+        h=int(2+2*math.sin(xx*0.031)+1.5*math.sin(xx*0.11)+rng.random()*1.2)
+        for k in range(max(0,h)):
+            if rng.random()<0.8: cv.px(xx,BASE+15-k,R.choice(LEAFS[:3]) if rng.random()<0.75 else R.choice(LEAFS),1.5)
     cv.rect(0,BASE+16,P0,BASE+20,C('#8c8e94'),2.5); snowcap(cv,0,P0,BASE+16,3,3)
     # road
     RY0=BASE+20; RY1=448
@@ -411,10 +422,13 @@ def street():
     nz=vnoise(P0,RY1-RY0,[(64,6),(16,3),(4,1)])
     sub=cv.c[RY0:RY1,0:P0]
     m1=nz>0.66; m2=(nz>0.58)&~m1&((np.add.outer(np.arange(RY1-RY0),np.arange(P0))%2)==0)
-    sub[m1,:3]=SNOW[1]; sub[m2,:3]=SNOW[0]
-    cv.hg[RY0:RY1,0:P0][m1]=0.6
-    m3=(nz>0.70); sub[m3,:3]=SNOW[2]
-    wet=(nz<0.32); sub[wet,:3]=(sub[wet,:3].astype(np.float32)*0.7).astype(np.uint8)
+    lr=rng.random(m1.shape)
+    lm=(nz>0.68)&(lr<0.32)
+    pal=np.array([GINKGO[2],GINKGO[3],GINKGO[1],MAPLE[2],BROWN[2]],np.uint8)
+    sub[lm,:3]=pal[(lr[lm]*9).astype(int)%5]
+    cv.hg[RY0:RY1,0:P0][lm]=0.6
+    wet=(nz<0.34); sub[wet,:3]=(sub[wet,:3].astype(np.float32)*0.55+np.array([4,6,10])).clip(0,255).astype(np.uint8)
+    cv.hg[RY0:RY1,0:P0][wet]=-0.4
     # lane markings: yellow double center line and dashed white
     for xx in range(0,P0):
         if not (IX0<xx<IX1):
@@ -422,21 +436,22 @@ def street():
             if (xx//24)%2==0 and math.sin(xx*0.02)>-0.5: cv.px(xx,RY0+24,C('#b8bcc4'),0.3)
     # crosswalk
     for xx in range(IX0+20,IX1-20,14): cv.rect(xx,RY0,xx+8,RY1,C('#b0b4bc'),0.4)
-    cv.noise(IX0,RY0,IX1,RY1,[(SNOW[1],0.08)],rng)
+    cv.noise(IX0,RY0,IX1,RY1,[(GINKGO[2],0.05),(MAPLE[2],0.02)],rng)
     # front curb (near side)
     cv.rect(0,RY1,P0,RY1+4,C('#7c7e84'),2); cv.rect(0,RY1+4,P0,WH,C('#0b0c10'),0)
     # park ground & slope
     for xx in range(SLOPE0,SLOPE0+60):  # snowdrift where road meets the park slope
         hh=int((xx-SLOPE0)*0.9)
-        cv.rect(xx,RY0+max(0,20-hh//2),xx+1,RY1+4,SNOW[2] if (xx+hh)%7 else SNOW[1],1.2)
+        cv.rect(xx,RY0+max(0,20-hh//2),xx+1,RY1+4,GRASS[2] if (xx+hh)%7 else GRASS[1],1.2)
     for xx in range(SLOPE0,LW):
         g=int(gy(xx))
         cv.rect(xx,g-12,xx+1,WH,C('#0b0c10'),0)
         if xx<WATER_X+6:
             # walkable snow surface band
-            cv.rect(xx,g-12,xx+1,g+8,SNOW[2] if xx<SLOPE1 else SNOW[1],1)
-            cv.px(xx,g-12,SNOW[3],2); cv.px(xx,g-11,SNOW[3],1.8)
-            if SLOPE0<=xx<SLOPE1 and (xx-SLOPE0)%9<2: cv.rect(xx,g-10,xx+1,g-4,SNOW[0],0.5)
+            cv.rect(xx,g-12,xx+1,g+8,GRASS[1] if xx<SLOPE1 else BROWN[1],1)
+            cv.px(xx,g-12,GRASS[3],2); cv.px(xx,g-11,GRASS[2],1.8)
+            if rng.random()<0.35: cv.px(xx,g-11-int(rng.random()*2),R.choice(LEAFS),2)
+            if SLOPE0<=xx<SLOPE1 and (xx-SLOPE0)%9<2: cv.rect(xx,g-10,xx+1,g-4,BROWN[2],0.5)
             if xx>=SLOPE1:
                 cv.rect(xx,g-6,xx+1,g-2,C('#5a5450'),0.4)  # gravel path line
         # stone embankment edge at water
@@ -450,6 +465,19 @@ def street():
     # streetlamps
     for lx in list(range(90,IX0-40,300))+list(range(IX1+60,4300,300))+[4420,4740,5060,5340]:
         streetlamp(cv,lx,BASE+12,'sodium' if (lx//300)%3==1 else 'led')
+    # 은행나무 가로수 (street ginkgo trees on sidewalk edge)
+    for tx in list(range(200,IX0-60,330))+list(range(IX1+150,4300,330)):
+        if any(abs(tx-l)<30 for l in range(90,5400,300)): tx+=40
+        tree(cv,tx,BASE+14,R.randint(110,150))
+        cv.rect(tx-6,BASE+12,tx+7,BASE+16,C('#3a3026'),1)
+    # leaf piles on the walking lane (gameplay: louder steps)
+    for (a,b) in [(560,690),(2160,2290),(3040,3150),(4180,4330),(4790,4900)]:
+        LEAF_PILES.append([a,b])
+        mid=(a+b)/2; half=(b-a)/2
+        for xx in range(a,b):
+            t=1-abs(xx-mid)/half; hgt=int(2+7*t*t+rng.random()*2)
+            for k in range(hgt):
+                cv.px(xx,FEET+2-k,R.choice(LEAFS[:3]) if rng.random()<0.7 else R.choice(LEAFS),1.5+k*0.4)
     # utility poles + wires
     tops=[]
     for px_ in range(250,5400,520):
@@ -472,21 +500,37 @@ def tree(cv,x,base,h):
             t=i/max(1,n-1); xx=x0+(x1-x0)*t; yy=y0+(y1-y0)*t
             ww=max(1,int(w*(1-t*0.4)))
             cv.rect(int(xx-ww/2),int(yy),int(xx-ww/2)+ww,int(yy)+1,C('#2a2420') if d>2 else C('#3a322c'),3)
-            if ang>-0.9 and ang<0.9 and i%2==0 and w<3: cv.px(xx,yy-1,SNOW[2],3.5)
+
         k=R.choice([2,2,3])
         for j in range(k):
             br(x1,y1,ang+R.uniform(-0.75,0.75),L*R.uniform(0.6,0.78),max(1,w*0.65),d-1)
-    br(x,base,R.uniform(-0.1,0.1),h*0.38,5,6)
+    tips=[]
+    def br2(x0,y0,ang,L,w,d):
+        if d==0 or L<3: tips.append((x0,y0)); return
+        x1=x0+L*math.sin(ang); y1=y0-L*math.cos(ang)
+        k=R.choice([2,2,3])
+        for j in range(k): br2(x1,y1,ang+R.uniform(-0.75,0.75),L*R.uniform(0.6,0.78),max(1,w*0.65),d-1)
+    state=R.getstate(); br(x,base,R.uniform(-0.1,0.1),h*0.38,5,6); R.setstate(state)
+    br2(x,base,R.uniform(-0.1,0.1),h*0.38,5,6)
+    pal=R.choice([GINKGO,GINKGO,MAPLE])
+    for (tx,ty) in tips:
+        r=R.uniform(3.5,6.5)
+        for k in range(int(r*r*1.6)):
+            ax=tx+R.gauss(0,r); ay=ty+R.gauss(0,r*0.7)
+            dy=(ay-ty)/r; c=pal[3] if dy<-0.5 else pal[2] if dy<0.3 else pal[1]
+            if R.random()<0.12: c=pal[0]
+            cv.px(ax,ay,c,4+(-dy))
 
 # ------------------------------------------------------------------ parallax layers
 def sky():
     W=lw(0.03); cv=Cv(W,WH)
-    cv.dgrad(0,0,W,300,C('#070a14'),C('#1e2036'),steps=10)
-    cv.dgrad(0,300,W,WH,C('#1e2036'),C('#4a3446'),steps=8)
+    cv.dgrad(0,0,W,230,C('#0a0c1c'),C('#2a2448'),steps=10)
+    cv.dgrad(0,230,W,330,C('#2a2448'),C('#7a3a44'),steps=8)
+    cv.dgrad(0,330,W,WH,C('#7a3a44'),C('#c86a3a'),steps=8)
     # clouds: dithered bands lit from below by city glow
     for k in range(40):
         cx=R.randint(0,W); cy=R.randint(120,330); rw=R.randint(60,200); rh=R.randint(6,16)
-        cv.ellipse(cx,cy,rw,rh,lerp(C('#141626'),C('#3a3048'),(cy-120)/210))
+        cv.ellipse(cx,cy,rw,rh,lerp(C('#1c1a30'),C('#8a4a40'),max(0,min(1,(cy-120)/210))))
     # moon behind cloud
     cv.ellipse(W*0.72,170,9,9,C('#d8dce8'),emi=C('#9aa0b8')); cv.ellipse(W*0.72+3,168,8,8,C('#151826'))
     return cv
@@ -498,8 +542,8 @@ def skyline(W,base,hmin,hmax,col,wincol,density,lit,p,seed,mountain=False,towers
             h=int(70+40*math.sin(xx*0.004+1)+20*math.sin(xx*0.013)+8*math.sin(xx*0.05))
             cv.rect(xx,base-60-h,xx+1,base,mul(col,0.8),0)
             # snow on ridges
-            cv.px(xx,base-60-h,lerp(col,SNOW[1],0.45),0)
-            if (xx*7)%13<4: cv.px(xx,base-59-h,lerp(col,SNOW[1],0.25),0)
+            cv.px(xx,base-60-h,lerp(col,MAPLE[1],0.35),0)
+            if (xx*7)%13<5: cv.px(xx,base-59-h,lerp(col,GINKGO[1],0.25),0)
         cv.text(int(W*0.18),base-150,'',col)
     x=0
     while x<W:
@@ -558,7 +602,7 @@ def mid1():
     # stream valley: opposite bank trees + embankment road lamps
     for xx in range(x,W):
         h=int(18+6*math.sin(xx*0.03)+4*math.sin(xx*0.11))
-        cv.rect(xx,base-h,xx+1,base+40,C('#1a2030'),0); cv.px(xx,base-h,SNOW[0],0)
+        cv.rect(xx,base-h,xx+1,base+40,C('#1a1e26'),0); cv.px(xx,base-h,lerp(C('#1a1e26'),GINKGO[1],0.4),0)
     for tx in range(x+30,W,70): tree(cv,tx,base-12,R.randint(50,80))
     for lx in range(x+60,W,110):
         cv.rect(lx,base-70,lx+1,base-14,C('#2a2e38'),0); cv.rect(lx-2,base-72,lx+3,base-70,C('#ffcf8a'),0,emi=C('#ffcf8a'))
@@ -576,7 +620,7 @@ def fg():
         if xx>6900: continue
         top=(WH-90-h) if xx<6700 else (WH-90-h+int((xx-6700)*0.6))
         cv.rect(xx,top,xx+1,WH,C('#0c0e14'),0)
-        cv.px(xx,top,SNOW[1],1); cv.px(xx,top+1,SNOW[0],0.5)
+        cv.px(xx,top,lerp(C('#0c0e14'),R.choice(LEAFS),0.5),1); cv.px(xx,top+1,lerp(C('#0c0e14'),R.choice(LEAFS),0.25),0.5)
     x=200
     while x<6500:
         k=R.random()
@@ -607,7 +651,7 @@ def fg():
             hgt=R.randint(18,46); lean=R.uniform(-0.25,0.35); base_=WH-R.randint(0,10)
             for k in range(hgt):
                 cv.px(rx+int(lean*k*0.6),base_-k,C('#121014') if k<hgt-5 else C('#3a3026'),2)
-            cv.px(rx+int(lean*hgt*0.6),base_-hgt,SNOW[1],2.5)
+            cv.px(rx+int(lean*hgt*0.6),base_-hgt,C('#b8a888'),2.5); cv.px(rx+int(lean*hgt*0.6),base_-hgt+1,C('#8a7a60'),2.5)
     return cv
 
 # ------------------------------------------------------------------ props
@@ -661,7 +705,7 @@ def car(color,kind='sedan',hazard=False,crashed=False):
     for x_,t in top.items():
         if t<gl-8:
             h=2+int(2*math.sin(x_*0.3))+ (2 if 40<x_<70 else 0)
-            for k in range(h): cv.px(x_,t-1-k,SNOW[3] if k==h-1 else SNOW[2],5+k*0.4)
+            if R.random()<0.25: cv.px(x_,t,R.choice(LEAFS),5)
     a=cv.c.copy(); outline(cv.c)
     return cv,(4,gl-34,W-4,gl) 
 
@@ -679,7 +723,7 @@ def ambulance():
     for wx in (26,100):
         cv.ellipse(wx,gl,9,9,C('#101114'),2,dome=3); cv.ellipse(wx,gl,4,4,C('#7a7e86'),4,dome=1)
     for x_ in range(4,92):
-        for k in range(R.randint(2,4)): cv.px(x_,gl-41-k,SNOW[2] if k else SNOW[3],5)
+        if R.random()<0.2: cv.px(x_,gl-41,R.choice(LEAFS),5)
     outline(cv.c)
     return cv,(4,gl-40,120,gl)
 
@@ -760,6 +804,7 @@ if __name__=='__main__':
     for k in ('water','bandage','note','radio'):
         meta['sprites']['item_'+k]=save_sprite(item(k),'S_item_'+k)
     meta['lights']=LIGHTS
+    meta['leafPiles']=LEAF_PILES
     meta['anims']=ANIMS
     json.dump(meta,open(OUT+'world.json','w'))
     print('lights',len(LIGHTS))

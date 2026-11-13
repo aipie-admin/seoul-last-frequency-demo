@@ -37,7 +37,7 @@ async function boot() {
     const meshes = L.chunks.map((c, i) => {
       const s = L.chunks.length > 1 ? '_' + i : '';
       const mat = R.spriteMat({ map: T(`L_${L.name}${s}_a.webp`), nrm: T(`L_${L.name}${s}_n.webp`), emi: T(`L_${L.name}${s}_e.webp`), layerLight: cf.light, emiStr: cf.emi, fogAmt: cf.fog });
-      mat.uniforms.uFogCol.value.set(0x141a2c).convertSRGBToLinear();
+      mat.uniforms.uFogCol.value.set(0x2a2032).convertSRGBToLinear();
       if (L.name === 'fg') mat.uniforms.uDark.value = 0.55;
       const m = R.quad(c.w, L.h, mat, ORDER[L.name]); m.userData = { x: c.x, w: c.w, h: L.h };
       return m;
@@ -46,10 +46,10 @@ async function boot() {
   });
   // ---------------- fog sheets, volumetrics, snow, water
   const fogs = [
-    R.fogSheet(15, { color: 0x1a2034, density: 0.5, y0: 220, y1: 340, speed: 0.05, scale: 120, par: 0.25 }),
-    R.fogSheet(25, { color: 0x1c2236, density: 0.4, y0: 260, y1: 360, speed: 0.07, scale: 90, par: 0.45 }),
-    R.fogSheet(35, { color: 0x20283c, density: 0.3, y0: 300, y1: 380, speed: 0.1, scale: 70, par: 0.8 }),
-    R.fogSheet(62, { color: 0x2a3248, density: 0.10, y0: 430, y1: 500, speed: 0.16, scale: 60, par: 1.0 }),
+    R.fogSheet(15, { color: 0x3a2a3a, density: 0.5, y0: 220, y1: 340, speed: 0.05, scale: 120, par: 0.25 }),
+    R.fogSheet(25, { color: 0x2e2a3c, density: 0.4, y0: 260, y1: 360, speed: 0.07, scale: 90, par: 0.45 }),
+    R.fogSheet(35, { color: 0x2a2a3a, density: 0.3, y0: 300, y1: 380, speed: 0.1, scale: 70, par: 0.8 }),
+    R.fogSheet(62, { color: 0x3a3440, density: 0.12, y0: 430, y1: 500, speed: 0.16, scale: 60, par: 1.0 }),
   ];
   const water = R.water(43, W);
   const vol = R.volumetrics(58);
@@ -57,11 +57,12 @@ async function boot() {
   function buildSnow() {
     snows.forEach(s => { R.scene.remove(s); s.geometry.dispose(); s.material.dispose(); });
     const q = QUAL[qKey].snow;
-    snows = [R.snow(26, q[0], 0.4, 1, 18, 0.45), R.snow(56, q[1], 1.0, 1, 32, 0.8), R.snow(72, q[2], 1.3, 1, 52, 0.9)];
+    snows = [R.leaves(26, Math.round(q[0] * 0.25), 0.4, 1, 12, 0.6), R.leaves(56, Math.round(q[1] * 0.18), 1.0, 1, 20, 1.0), R.leaves(72, Math.round(q[2] * 0.2), 1.3, 2, 30, 1.1)];
   }
   buildSnow();
+  const rainMesh = R.rain(64, 900);
   // ---------------- props / items / barrels
-  const game = new Game(W, world.sprites, audio, log);
+  const game = new Game(W, world.sprites, audio, log, world.leafPiles || []);
   const propMeshes = game.props.map(p => {
     const mat = R.spriteMat({ map: T(`S_${p.k}_a.webp`), nrm: T(`S_${p.k}_n.webp`), emi: T(`S_${p.k}_e.webp`) });
     const m = R.quad(p.w, p.h, mat, 45); m.userData = p; return m;
@@ -124,8 +125,8 @@ async function boot() {
   $('#btnHelp').onclick = () => { $('#help').classList.remove('hidden'); $('#helpCloseTxt').textContent = '돌아가기'; };
   $('#btnHelpClose').onclick = () => { $('#help').classList.add('hidden'); if (ui.mode === 'pause') setMode('play'); };
   const startGame = () => {
-    audio.start(); game.reset(); buildItems(); ui.logs = []; $('#log').innerHTML = '';
-    log('12월 · 23:41 · 양재동. 정전 사흘째.'); log('무전: "물가로 가라." — 목표: 양재천 둔치', 'note');
+    audio.start(); game.reset(); buildItems(); rainAmt = 0; ui.logs = []; $('#log').innerHTML = '';
+    log('10월 · 18:52 · 양재동. 정전 사흘째. 해가 진다.'); log('무전: "물가로 가라." — 목표: 양재천 둔치', 'note');
     log('[SHIFT] 달리기 [S] 웅크리기 [SPACE] 점프 [E] 줍기');
     camX = 0; setMode('play');
   };
@@ -134,7 +135,7 @@ async function boot() {
   input.bindTouch($('#touch'));
 
   // ---------------- camera
-  let camX = 0, camTop = 150, titleT = 0;
+  let camX = 0, camTop = 150, titleT = 0, rainAmt = 0;
   const lightsWorld = world.lights.map(l => ({ ...l, i: l.cone ? l.i * 0.8 : l.i, z: l.cone ? 34 : 18, cos: 0.42 }));
   const tmpL = [];
   function gatherLights(t) {
@@ -202,10 +203,15 @@ async function boot() {
       const ox = Math.round(cX * L.p), top = Math.round(-150 - (cT - 150) * L.py);
       for (const m of L.meshes) { const d = m.userData; m.position.set(d.x - ox + d.w / 2, top + d.h / 2, 0); m.visible = d.x - ox < R.W && d.x - ox + d.w > 0; }
     }
-    for (const f of fogs) { f.material.uniforms.uCamX.value = cX; f.material.uniforms.uCamY.value = cT; f.material.uniforms.uOn.value = DBG.has('nofog') ? 0 : QUAL[qKey].fog; }
+    for (const f of fogs) { f.material.uniforms.uCamX.value = cX; f.material.uniforms.uCamY.value = cT; f.material.uniforms.uOn.value = (DBG.has('nofog') ? 0 : QUAL[qKey].fog) * (1 + rainAmt * 0.6); }
     water.material.uniforms.uCamX.value = cX; water.material.uniforms.uCamY.value = cT;
     vol.material.uniforms.uCamX.value = cX; vol.material.uniforms.uOn.value = QUAL[qKey].vol; vol.visible = QUAL[qKey].vol > 0 && !DBG.has('novol');
-    for (const s of snows) { s.material.uniforms.uCamX.value = cX; s.material.uniforms.uCamY.value = cT; }
+    const raining = ui.mode === 'play' && game.rain.on;
+    rainAmt += ((raining ? 1 : 0) - rainAmt) * Math.min(1, dt * 1.5);
+    for (const s of snows) { s.material.uniforms.uCamX.value = cX; s.material.uniforms.uCamY.value = cT; s.material.uniforms.uRain.value = rainAmt; }
+    rainMesh.material.uniforms.uCamX.value = cX; rainMesh.material.uniforms.uCamY.value = cT; rainMesh.material.uniforms.uOn.value = rainAmt; rainMesh.visible = rainAmt > 0.02;
+    water.material.uniforms.uRain.value = rainAmt;
+    R.amb.value.setRGB(0.17 - rainAmt * 0.04, 0.17 - rainAmt * 0.02, 0.24);
     for (const m of propMeshes) { const d = m.userData; m.position.set(d.x - cX + d.w / 2, d.y - cT + d.h / 2, 0); }
     for (const m of barrelMeshes) { const d = m.userData; m.position.set(d.x - cX + 14, d.y - cT + 22, 0); m.material.uniforms.uUvRect.value.x = (Math.floor(t * 9 + d.x) % 4) * bs.fw / bs.w; }
     for (const m of itemMeshes) { const d = m.userData; m.visible = !d.taken; m.position.set(Math.round(d.x - cX), Math.round(d.y - cT - 8 + (Math.sin(t * 3 + d.x) > 0.6 ? -1 : 0)), 0); m.material.uniforms.uEmiStr.value = 1 + Math.sin(t * 4) * 0.5; }
@@ -233,7 +239,7 @@ async function boot() {
     // post uniforms
     const c = R.post.comp.uniforms;
     c.uHurt.value = Math.max(game.flash * 0.6, p.blood < 50 ? (50 - p.blood) / 50 * (0.35 + 0.15 * Math.sin(t * 5)) : 0);
-    c.uCold.value = ui.mode === 'play' ? Math.max(0, (35.4 - p.temp) / 2) : 0;
+    c.uCold.value = rainAmt * 0.6;
     c.uDesat.value = ui.mode === 'play' ? Math.max(0, (60 - p.blood) / 60) : 0;
     c.uFade.value = ui.mode === 'dead' ? 0.4 : 1;
     R.render();
@@ -249,7 +255,8 @@ async function boot() {
     const p = game.p;
     bar('#bBlood', (p.blood - 25) / 75 * 100, p.blood < 50); $('#vBlood').textContent = Math.max(0, Math.round(p.blood));
     bar('#bStam', p.stamina, p.stamina < 20); $('#vStam').textContent = Math.round(p.stamina);
-    bar('#bTemp', (p.temp - 33) / 4 * 100, p.temp < 35); $('#vTemp').textContent = p.temp.toFixed(1);
+    const rn = game.rain; bar('#bTemp', rn.on ? rn.t / rn.dur * 100 : 0, false); $('#vTemp').textContent = rn.on ? Math.ceil(rn.t) + 's' : '—';
+    $('#lTemp').textContent = rn.on ? '비 · 위축' : '날씨 · 맑음';
     $('#vBleed').textContent = p.bleed > 0.05 ? `진행 −${p.bleed.toFixed(1)}/s` : '없음';
     $('#vBleed').style.color = p.bleed > 0.05 ? 'var(--red)' : '';
     $('#vExpo').textContent = p.exposed ? '광견병 노출 · 확인됨' : '광견병 노출 · 없음';

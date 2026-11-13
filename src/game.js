@@ -3,8 +3,8 @@ export const M = 28; // px per metre
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export class Game {
-  constructor(world, sprites, audio, log) {
-    this.w = world; this.sp = sprites; this.audio = audio; this.log = log;
+  constructor(world, sprites, audio, log, piles = []) {
+    this.piles = piles; this.w = world; this.sp = sprites; this.audio = audio; this.log = log;
     this.reset();
   }
   ground(x) {
@@ -42,6 +42,8 @@ export class Game {
     this.shake = 0; this.flash = 0;
     this.prompt = null;
     this.chased = 0;
+    this.rain = { on: false, t: 0, next: 9999, scripted: false, dur: 0 };
+    this.pileLogged = false;
   }
   // -------------------------------------------------------------------------------------
   collideX(o, hw, hh, dx) {
@@ -91,7 +93,7 @@ export class Game {
     if (busy && p.act !== 'interact') dir = 0;
     p.run = inp.run && dir !== 0 && !p.crouch && p.stamina > 1;
     const sp = p.crouch ? 30 : p.run ? 128 : 62;
-    const target = dir * sp * (p.temp < 35 ? 0.85 : 1);
+    const target = dir * sp;
     const acc = p.onGround ? 900 : 420;
     p.vx += clamp(target - p.vx, -acc * dt, acc * dt);
     if (dir) p.face = dir;
@@ -111,20 +113,24 @@ export class Game {
     else p.onGround = false;
     // stamina
     if (p.run) p.stamina -= 17 * dt;
-    else p.stamina += (p.crouch ? 16 : 13) * dt * (p.temp < 35 ? 0.5 : 1) * (Math.abs(p.vx) < 5 ? 1.4 : 1);
+    else p.stamina += (p.crouch ? 16 : 13) * dt * (Math.abs(p.vx) < 5 ? 1.4 : 1);
     p.stamina = clamp(p.stamina, 0, 100);
-    // temperature: cold drains, barrels warm
-    let warm = 0; for (const b of this.barrels) if (Math.abs(b.x + 14 - p.x) < 70) warm = 1;
-    p.temp += (warm ? 0.12 : -0.006 - (p.run ? 0 : 0.002)) * dt; p.temp = clamp(p.temp, 33.0, 37.0);
+    // weather: autumn showers. Rain = infected falter (safe window)
+    const rn = this.rain;
+    if (!rn.scripted && p.x > 2250) { rn.scripted = true; this.startRain(13); }
+    if (rn.on) { rn.t -= dt; if (rn.t <= 0) { rn.on = false; rn.next = 45 + Math.random() * 30; this.log('비 그침 — 감염자들이 다시 움직인다', 'alert'); } }
+    else if (rn.scripted) { rn.next -= dt; if (rn.next <= 0) this.startRain(10 + Math.random() * 4); }
     // bleeding
     if (p.bleed > 0) { p.blood -= p.bleed * dt; p.bleed = Math.max(0, p.bleed - 0.12 * dt); }
-    if (p.temp <= 33.2) p.blood -= 0.15 * dt;
     // noise this frame
     const moving = Math.abs(p.vx) > 8 && p.onGround;
     let nz = moving ? (p.crouch ? 0.7 * M : p.run ? 9 * M : 3 * M) : 0;
+    const onPile = this.piles.some(([a, b]) => p.x > a && p.x < b) && p.onGround;
+    if (onPile && moving) { nz = nz * 1.9 + 2 * M; if (!this.pileLogged) { this.pileLogged = true; this.log('낙엽 더미 — 발소리가 커진다. 웅크려도 소리가 난다', 'alert'); } }
+    p.onPile = onPile;
     p.noise = Math.max(nz, p.noise - 300 * dt);
     p.noiseShow = Math.max(p.noise, p.noiseShow - 140 * dt);
-    if (moving) { p.stepAcc = (p.stepAcc || 0) + Math.abs(p.vx) * dt; if (p.stepAcc > (p.run ? 26 : 22)) { p.stepAcc = 0; this.audio.step(p.crouch ? 0.35 : p.run ? 1.1 : 0.7); } }
+    if (moving) { p.stepAcc = (p.stepAcc || 0) + Math.abs(p.vx) * dt; if (p.stepAcc > (p.run ? 26 : 22)) { p.stepAcc = 0; this.audio.step((p.crouch ? 0.35 : p.run ? 1.1 : 0.7) * (onPile ? 1.8 : 1), onPile); } }
     // actions
     if (inp.torchPressed) { p.torch = !p.torch; this.audio.click(); this.log(p.torch ? '손전등 ON — 시야 확보, 감염자 주의 유발' : '손전등 OFF — 어둠 속 은신'); }
     if (inp.shovePressed && !busy && p.stamina >= 20) this.shove();
@@ -159,6 +165,7 @@ export class Game {
     if (p.blood <= 25 && !p.dead) { p.dead = true; p.anim = 'dead'; p.animT = 0; this.audio.death(); setTimeout(() => { this.over = 'dead'; }, 1600); this.overPending = 'dead'; }
     if (!p.dead && p.x >= w.goal && !this.overPending) { this.overPending = 'win'; this.audio.win(); setTimeout(() => { this.over = 'win'; }, 900); }
   }
+  startRain(d) { const r = this.rain; r.on = true; r.t = d; r.dur = d; this.audio.rain?.(d); this.log('비 — 감염자들이 빗속에서 움츠러든다. 지금 지나가라', 'safe'); }
   emitNoise(r) { this.p.noise = Math.max(this.p.noise, r); }
   shove() {
     const p = this.p; p.act = 'shove'; p.actT = 0.32; p.animT = 0; p.stamina -= 20; this.stats.shoves++;
@@ -207,11 +214,19 @@ export class Game {
     const facing = Math.sign(dx) === e.face;
     let sight = (4 + 6 * Math.min(1.2, p.lit)) * M * (p.crouch ? 0.6 : 1);
     const sees = !p.dead && facing && adx < sight && dy < 60;
-    const hears = !p.dead && p.noise > adx && dy < 80;
+    const hears = !p.dead && p.noise * (this.rain.on ? 0.4 : 1) > adx && dy < 80;
     const close = !p.dead && adx < 1.2 * M && dy < 40;
     const aware = sees || hears || close;
     let mv = 0, anim = 'idle';
+    if (this.rain.on && !['lie', 'rise', 'cower', 'hydro'].includes(e.state) && Math.abs(e.x - p.x) < 700) { e.state = 'cower'; e.st = 0.8 + Math.random() * 1.2; this.audio.screech(0.25); }
     switch (e.state) {
+      case 'cower': {
+        // 빗속 위축: 경련 후 웅크린 채 뒷걸음, 추격 중단
+        anim = e.st > 0 || Math.sin(this.t * 3 + e.id) > 0.85 ? 'convulse' : 'idle';
+        e.face = Math.sign(dx) || e.face; mv = adx < 160 ? -e.face * 14 : 0;
+        if (!this.rain.on) { e.state = 'search'; e.st = 2; e.home = e.x; }
+        break;
+      }
       case 'lie': {
         anim = 'lie';
         if (!p.dead && adx < (p.crouch ? 0.8 : 1.4) * M && dy < 30) { e.state = 'rise'; e.st = 0.5; e.face = Math.sign(dx) || 1; this.audio.screech(0.9); }

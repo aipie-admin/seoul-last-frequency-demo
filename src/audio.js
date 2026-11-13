@@ -32,7 +32,16 @@ export class Audio {
     const g = c.createGain(); g.gain.setValueAtTime(gain, c.currentTime); g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
     o.connect(g); g.connect(this.master); o.start(); o.stop(c.currentTime + dur + 0.05);
   }
-  step(k = 1) { this.noise(0.09, 1800 + Math.random() * 600, 0.9, 0.10 * k, 'bandpass'); this.noise(0.06, 500, 1, 0.06 * k, 'lowpass'); }
+  step(k = 1, leaves = false) {
+    if (leaves) { this.noise(0.22, 3200 + Math.random() * 1500, 0.5, 0.09 * k, 'highpass', 0.6); this.noise(0.12, 1400, 0.8, 0.06 * k, 'bandpass'); return; }
+    this.noise(0.05, 900 + Math.random() * 300, 1.2, 0.07 * k, 'bandpass'); this.noise(0.05, 220, 1, 0.08 * k, 'lowpass'); }
+  rain(d) {
+    const c = this.ctx; if (!c) return;
+    const s = c.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true;
+    const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1800;
+    const g = c.createGain(); const now = c.currentTime; g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.14, now + 1.5); g.gain.setValueAtTime(0.14, now + d - 1.5); g.gain.exponentialRampToValueAtTime(0.0001, now + d);
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(); s.stop(now + d + 0.1);
+  }
   jump() { this.noise(0.12, 900, 0.7, 0.08); }
   click() { this.tone(1400, 0.04, 0.05, 'square'); }
   pickup() { this.tone(660, 0.07, 0.06, 'square'); setTimeout(() => this.tone(990, 0.09, 0.05, 'square'), 70); }

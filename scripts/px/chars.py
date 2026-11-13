@@ -6,9 +6,9 @@ GROUND=61
 def ramp(*h): return [np.array(hx(c),np.float32) for c in h]
 PAL={
  'player':{
-  'coat':ramp('#121419','#1f232c','#323846','#4b5466'),
+  'coat':ramp('#22261a','#363c26','#4e5634','#68724a'),
   'pants':ramp('#191f2c','#243046','#324366','#435887'),
-  'boot':ramp('#24180f','#3a281a','#523c28','#6c5236'),
+  'boot':ramp('#1a1a1c','#2c2c30','#44444a','#606068'),
   'skin':ramp('#6e4234','#9f624a','#c58a6a','#e0ae8c'),
   'hair':ramp('#0a0a0e','#15151b','#20202c','#2e2e3c'),
   'cap':ramp('#2a2c31','#40434a','#5b5f68','#7a7f8a'),
@@ -73,15 +73,15 @@ def build(p, kind):
         zz=z-(1 if side=='B' else 0)
         cap(hip,knee,4.2,3.6,zz,'pants'); cap(knee,ank,3.4,2.8,zz,'pants')
         cap((ank[0]-0.5,ank[1]),foot,2.6,2.2,zz,'boot')
-        if kind=='player' or kind in ('inf_c',):
-            cap(hip,P(hip,th,10),5.6,5.0,zz+0.5,'coat','hem')  # long coat over thigh
+        if kind=='inf_c':
+            cap(hip,P(hip,th,10),5.4,4.8,zz+0.5,'coat','hem')  # trench coat over thigh
         if kind=='inf_a':
             cap(hip,P(hip,th,8),5.2,4.6,zz+0.5,'coat','hem')
     # torso
     if kind=='player':
         bp=U((hip[0]-5*math.cos(lean),hip[1]-5*math.sin(lean)),lean,9)
         cap((hip[0]-4.5*math.cos(lean)+0.3, hip[1]-4-4.5*math.sin(lean)), bp,4.6,5.2,-3,'pack')
-    cap(hip,sho,6.4,6.6,0,'coat','torso')
+    cap((hip[0],hip[1]-1) if kind=='player' else hip,sho,5.4 if kind=='player' else 6.4,5.8 if kind=='player' else 6.6,0,'coat','torso')
     # arms
     for side,z in (('B',-5),('F',5)):
         sa=g('ua'+side); la=g('la'+side)
@@ -97,9 +97,9 @@ def build(p, kind):
     cap(neck,head,3.0,6.0,1,'skin','head')
     if kind=='player':
         s1=U(sho,lean,0.2); s2=U(sho,lean,2.6)
-        cap(s1,s2,4.3,3.9,1.2,'scarf')
-        tail=(s1[0]-5.5,s1[1]+5+p.get('scarfw',0))
-        cap(s1,tail,2.0,1.6,-2,'scarf')
+        cap(s1,s2,3.6,3.2,1.2,'scarf')
+        hood=(s1[0]-4.5,s1[1]+1.5)
+        cap(s1,hood,3.0,2.6,-1,'scarf')
     return parts, dict(hip=hip,sho=sho,neck=neck,head=head,lean=lean,headang=lean+g('head'))
 
 def raster(parts, ox, oy, rot=0.0, piv=(0,0)):
@@ -142,7 +142,7 @@ def shade(parts,mat,N,T,TAG,zb,kind,extra=None):
     idx=np.digitize(v,[0.52,0.72,0.92]).astype(np.int32)
     # quilting on coat torso / hem
     q=((TAG==1)|(TAG==2))&a
-    if kind in ('player','inf_c'):
+    if False:
         line=(np.mod(T,4.5)<1.0)&q
         idx[line]-=1
         Nn[...,1][line]-=0.35
@@ -173,14 +173,13 @@ def face(out,info,ox,oy,kind,rot=0.0,piv=(0,0),fr=0,hurt=False):
     pal=PAL[kind]
     hair=pal['hair']; 
     if kind=='player':
-        cap=PAL['player']['cap']
         for ly in range(1,7):
-            for lx in range(-6,6):
-                if lx*lx+ (ly-0.5)**2 <= 36 and ly>=1.5:
-                    put(lx,ly,cap[2] if ly>4 or lx>2 else cap[1])
-        for lx in range(-6,6): put(lx,1.5,cap[3] if lx>0 else cap[2])  # fold band
+            for lx in range(-6,5):
+                if lx*lx+(ly+0.5)**2<=34 and ly>=1:
+                    put(lx,ly,hair[2] if (lx+ly)%3==0 else hair[1])
         for lx in range(-6,-2):
             for ly in range(-3,1): put(lx,ly,hair[1])
+        put(4,1.5,hair[1]); put(5,1,hair[0])
         put(3,-0.3,np.array((20,16,16))); put(4.6,-2,pal['skin'][1]); 
         put(2,-3.5,pal['skin'][0]) # mouth hint
     else:

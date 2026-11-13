@@ -193,7 +193,7 @@ export class Renderer {
   }
   water(order, world) {
     return this.fsQuad(`
-      precision highp float; varying vec2 vUv; uniform float uTime; uniform float uCamX,uCamY,uX0,uY0;
+      precision highp float; varying vec2 vUv; uniform float uTime; uniform float uCamX,uCamY,uX0,uY0,uRain;
       ${LIGHT_UNI} ${BAYER}
       void main(){
         vec2 sp=vec2(gl_FragCoord.x, uRes.y-gl_FragCoord.y);
@@ -211,16 +211,19 @@ export class Renderer {
           float f=clamp(1.0-abs(P.x-sp.x)/400.0,0.0,1.0);
           col+=uLC[i].rgb*uLC[i].a*s*0.35*f*(1.0-clamp(depth/70.0,0.0,0.8));
         }
-        // ice floes near bank (winter: partially frozen)
-        float ice=fbm(vec2(w.x*0.025,w.y*0.09));
-        float edge=1.0-clamp((w.x-uX0)/160.0,0.0,1.0);
-        if(ice+edge*0.45>0.78){ col=mix(vec3(0.42,0.50,0.62),vec3(0.62,0.70,0.80),step(0.86,ice+edge*0.45)); col*=0.55; }
-        if(w.y<uY0+1.0) col=vec3(0.55,0.62,0.72)*0.6;
+        // floating leaves
+        float lf=hash12(floor(vec2(w.x-uTime*6.0,w.y)*vec2(0.5,1.0)));
+        if(lf>0.985) col=mix(vec3(0.55,0.38,0.06),vec3(0.5,0.12,0.05),step(0.993,lf))*0.6;
+        // rain rings
+        vec2 cell=floor(w/vec2(10.0,4.0)); float ph=fract(uTime*1.3+hash12(cell)*7.0);
+        float ring=step(abs(length((w-cell*vec2(10.0,4.0)-vec2(5.0,2.0))*vec2(1.0,2.5))-ph*5.0),0.6)*(1.0-ph)*uRain;
+        col+=ring*vec3(0.18,0.2,0.24);
+        if(w.y<uY0+1.0) col=vec3(0.30,0.32,0.36)*0.6;
         float b=bayer4(gl_FragCoord.xy); col=floor(col*24.0+b)/24.0;
         gl_FragColor=vec4(col,1.0);
-      }`, { uCamX: { value: 0 }, uCamY: { value: 0 }, uX0: { value: world.water }, uY0: { value: world.low + 6 } }, order);
+      }`, { uCamX: { value: 0 }, uCamY: { value: 0 }, uX0: { value: world.water }, uY0: { value: world.low + 6 }, uRain: { value: 0 } }, order);
   }
-  snow(order, count, par, size, speed, bright) {
+  leaves(order, count, par, size, speed, bright) {
     const g = new THREE.BufferGeometry();
     const a = new Float32Array(count * 4);
     for (let i = 0; i < count; i++) { a[i * 4] = Math.random(); a[i * 4 + 1] = Math.random(); a[i * 4 + 2] = Math.random(); a[i * 4 + 3] = Math.random(); }
@@ -228,27 +231,49 @@ export class Renderer {
     g.setAttribute('seed', new THREE.BufferAttribute(a, 4));
     const mat = new THREE.ShaderMaterial({
       vertexShader: `
-        attribute vec4 seed; uniform float uTime,uCamX,uCamY,uPar,uSize,uSpeed,uWind; varying vec3 vC; varying float vA;
+        attribute vec4 seed; uniform float uTime,uCamX,uCamY,uPar,uSize,uSpeed,uWind,uRain; varying vec3 vC; varying float vA; varying float vFlip;
         ${LIGHT_UNI}
         void main(){
-          float W=uRes.x+40.0, H=uRes.y+40.0;
-          float t=uTime*uSpeed*(0.7+0.6*seed.z);
-          float x=mod(seed.x*W + t*uWind*0.6 + sin(t*0.05+seed.w*20.0)*12.0 - uCamX*uPar, W)-20.0;
-          float y=mod(seed.y*H + t - uCamY*uPar, H)-20.0;
+          float W=uRes.x+60.0, H=uRes.y+40.0;
+          float t=uTime*uSpeed*(0.6+0.8*seed.z);
+          float gust=sin(uTime*0.35+seed.w*3.0)*0.5+0.5;
+          float x=mod(seed.x*W + t*uWind*(0.6+gust) + sin(t*0.09+seed.w*20.0)*18.0 - uCamX*uPar, W)-30.0;
+          float y=mod(seed.y*H + t*(1.0+uRain*1.5) - uCamY*uPar, H)-20.0;
           x=floor(x)+0.5; y=floor(y)+0.5;
           vec3 acc=vec3(0.0);
           for(int i=0;i<${MAXL};i++){ if(i>=uNL) break; vec4 P=uLP[i]; vec2 d=vec2(x,y)-P.xy; float dist=length(d); if(dist>P.w*1.2) continue;
             float cone= uLD[i].w>0.5 ? smoothstep(uLD[i].z-0.05,uLD[i].z+0.1,dot(normalize(d+0.0001),uLD[i].xy)) : 1.0;
             acc+=uLC[i].rgb*uLC[i].a*cone*pow(1.0-dist/(P.w*1.2),1.5); }
-          vC=vec3(0.55,0.62,0.78)+acc*2.2; vA=0.55+0.45*seed.w;
-          gl_PointSize= uSize*(seed.z>0.85?2.0:1.0);
+          float k=fract(seed.w*7.31);
+          vec3 base = k<0.45 ? vec3(0.85,0.62,0.10) : k<0.7 ? vec3(0.70,0.18,0.08) : k<0.88 ? vec3(0.45,0.28,0.14) : vec3(0.95,0.78,0.25);
+          vC=base*(0.18+acc*1.6); vA=1.0;
+          vFlip=step(0.0,sin(uTime*(3.0+seed.z*6.0)+seed.x*40.0)); // tumbling: flat <-> edge
+          gl_PointSize= uSize*(seed.z>0.8?2.0:1.0);
           gl_Position=projectionMatrix*viewMatrix*vec4(x,y,0.0,1.0);
         }`,
-      fragmentShader: `precision highp float; varying vec3 vC; varying float vA; uniform float uBright; void main(){ gl_FragColor=vec4(vC*uBright, vA); }`,
-      uniforms: { ...this.lightU, uTime: this.time, uCamX: { value: 0 }, uCamY: { value: 0 }, uPar: { value: par }, uSize: { value: size }, uSpeed: { value: speed }, uWind: { value: 34 }, uBright: { value: bright } },
+      fragmentShader: `precision highp float; varying vec3 vC; varying float vA; varying float vFlip; uniform float uBright;
+        void main(){ vec2 c=gl_PointCoord-0.5; if(vFlip<0.5 && abs(c.y)>0.26) discard; gl_FragColor=vec4(vC*uBright, vA); }`,
+      uniforms: { ...this.lightU, uTime: this.time, uCamX: { value: 0 }, uCamY: { value: 0 }, uPar: { value: par }, uSize: { value: size }, uSpeed: { value: speed }, uWind: { value: 46 }, uBright: { value: bright }, uRain: { value: 0 } },
       transparent: true, depthTest: false, depthWrite: false,
     });
     const p = new THREE.Points(g, mat); p.renderOrder = order; p.frustumCulled = false; this.scene.add(p); return p;
+  }
+  rain(order, count) {
+    // short slanted streaks as line segments, pixel-snapped
+    const g = new THREE.BufferGeometry();
+    const seeds = new Float32Array(count * 2 * 4); const pos = new Float32Array(count * 2 * 3);
+    for (let i = 0; i < count; i++) { const s = [Math.random(), Math.random(), Math.random(), Math.random()]; for (let e = 0; e < 2; e++) { seeds.set(s, (i * 2 + e) * 4); pos[(i * 2 + e) * 3] = e; } }
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(seeds, 4));
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: `attribute vec4 seed; uniform float uTime,uCamX,uCamY; uniform vec2 uRes2; varying float vA;
+        void main(){ float W=uRes2.x+80.0,H=uRes2.y+40.0; float t=uTime*(420.0+seed.z*160.0);
+          float x=mod(seed.x*W - uCamX*1.1 - t*0.18, W)-20.0; float y=mod(seed.y*H + t - uCamY, H)-20.0;
+          float L=6.0+seed.w*6.0; x=floor(x - position.x*L*0.18); y=floor(y - position.x*L);
+          vA=0.25+0.35*seed.w; gl_Position=projectionMatrix*viewMatrix*vec4(x+0.5,y+0.5,0.0,1.0); }`,
+      fragmentShader: `precision highp float; varying float vA; uniform float uOn; void main(){ gl_FragColor=vec4(0.55,0.62,0.72,vA*uOn); }`,
+      uniforms: { uTime: this.time, uCamX: { value: 0 }, uCamY: { value: 0 }, uRes2: this.lightU.uRes, uOn: { value: 0 } }, transparent: true, depthTest: false, depthWrite: false,
+    });
+    const l = new THREE.LineSegments(g, mat); l.renderOrder = order; l.frustumCulled = false; this.scene.add(l); return l;
   }
   // post --------------------------------------------------------------------------------
   buildPost() {
@@ -277,15 +302,15 @@ export class Renderer {
         c=pow(c,vec3(1.0/2.2));
         // grade: cool shadows, warm highlights, slight desat
         float l=dot(c,vec3(0.299,0.587,0.114));
-        c=mix(c,c*vec3(0.86,0.95,1.18),(1.0-l)*0.55);
-        c=mix(c,c*vec3(1.08,1.0,0.90),l*0.5);
+        c=mix(c,c*vec3(0.90,0.92,1.12),(1.0-l)*0.45);
+        c=mix(c,c*vec3(1.12,1.0,0.84),l*0.55);
         c=mix(vec3(l),c,0.88-uDesat*0.7);
         // vignette (quantized)
         vec2 q=uv-0.5; float v=1.0-dot(q,q)*uVig; c*=v;
         // hurt / cold edges
         float e=smoothstep(0.18,0.62,length(q*vec2(1.0,1.2)));
         c=mix(c,vec3(0.55,0.02,0.02),e*uHurt);
-        c=mix(c,vec3(0.62,0.72,0.86),e*uCold*0.5*step(0.5,hash12(ip*0.5+floor(uTime*2.0))));
+        c=mix(c,c*vec3(0.80,0.88,1.0),uCold); // rain: cooler, darker
         // grain per internal pixel, stepped at 12 fps
         float g=hash12(ip+floor(uTime*12.0)*17.31)-0.5; c+=g*uGrain;
         c*=uFade;
